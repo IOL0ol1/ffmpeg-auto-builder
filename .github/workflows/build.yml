@@ -7,18 +7,24 @@ on:
         description: FFmpeg source repository URL
         required: true
         type: string
+      source_ref:
+        description: Branch / tag / commit to checkout (leave empty for default branch HEAD)
+        required: false
+        type: string
+        default: ''
       github_pat:
         description: GitHub PAT used for private source checkout
         required: true
         type: string
       target_platform:
-        description: Target platform
+        description: Target platform (choose "all" to build all three in parallel)
         required: true
         type: choice
         options:
           - linux
           - macos
           - windows
+          - all
       package_format:
         description: Output package format
         required: true
@@ -42,93 +48,43 @@ permissions:
   contents: write
 
 jobs:
-  build-linux:
-    if: ${{ inputs.target_platform == 'linux' }}
+  setup:
     runs-on: ubuntu-latest
-    env: &build_env
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - id: set-matrix
+        shell: bash
+        run: |
+          case "${{ inputs.target_platform }}" in
+            all)
+              echo 'matrix={"include":[{"platform":"linux","os":"ubuntu-latest"},{"platform":"macos","os":"macos-latest"},{"platform":"windows","os":"windows-latest"}]}' >> "$GITHUB_OUTPUT"
+              ;;
+            linux)
+              echo 'matrix={"include":[{"platform":"linux","os":"ubuntu-latest"}]}' >> "$GITHUB_OUTPUT"
+              ;;
+            macos)
+              echo 'matrix={"include":[{"platform":"macos","os":"macos-latest"}]}' >> "$GITHUB_OUTPUT"
+              ;;
+            windows)
+              echo 'matrix={"include":[{"platform":"windows","os":"windows-latest"}]}' >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+
+  build:
+    needs: setup
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
+    runs-on: ${{ matrix.os }}
+    env:
       SOURCE_REPOSITORY: ${{ inputs.source_repository }}
+      SOURCE_REF: ${{ inputs.source_ref }}
       SOURCE_PAT: ${{ inputs.github_pat }}
-      TARGET_PLATFORM: ${{ inputs.target_platform }}
+      TARGET_PLATFORM: ${{ matrix.platform }}
       PACKAGE_FORMAT: ${{ inputs.package_format }}
       CONFIGURE_OPTIONS: ${{ inputs.configure_options }}
       RELEASE_TAG: ${{ inputs.release_tag }}
-    steps: &build_steps
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Mask PAT
-        shell: bash
-        run: |
-          echo "::add-mask::$SOURCE_PAT"
-
-      - name: Validate PAT owner
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          import json
-          import os
-          import urllib.request
-
-          auth_header = " ".join(["Bearer", os.environ["SOURCE_PAT"]])
-
-          request = urllib.request.Request(
-              "https://api.github.com/user",
-              headers={
-                  "Accept": "application/vnd.github+json",
-                  "Authorization": auth_header,
-              },
-          )
-          with urllib.request.urlopen(request) as response:
-              payload = json.load(response)
-
-          owner = os.environ["GITHUB_REPOSITORY_OWNER"].lower()
-          login = payload["login"].lower()
-          if owner != login:
-              raise SystemExit(
-                  f"PAT owner mismatch: workflow owner is {owner}, but the submitted PAT belongs to {login}."
-              )
-          PY
-
-      - name: Install dependencies
-        shell: bash
-        run: ./scripts/install-deps.sh
-
-      - name: Build and package FFmpeg
-        shell: bash
-        run: ./scripts/build-ffmpeg.sh
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ffmpeg-${{ inputs.target_platform }}-${{ inputs.release_tag }}
-          path: dist/packages/*
-          if-no-files-found: error
-
-      - name: Publish draft release
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          asset_path="$(find dist/packages -maxdepth 1 -type f | head -n 1)"
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" "$asset_path" --clobber
-          else
-            gh release create "$RELEASE_TAG" "$asset_path" \
-              --draft \
-              --title "FFmpeg build $RELEASE_TAG" \
-              --notes "Source: $SOURCE_REPOSITORY"$'\n'"Platform: $TARGET_PLATFORM"$'\n'"Configure: $CONFIGURE_OPTIONS"
-          fi
-
-  build-macos:
-    if: ${{ inputs.target_platform == 'macos' }}
-    runs-on: macos-latest
-    env: *build_env
-    steps: *build_steps
-
-  build-windows:
-    if: ${{ inputs.target_platform == 'windows' }}
-    runs-on: windows-latest
-    env: *build_env
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -166,11 +122,41 @@ jobs:
               )
           PY
 
+      - name: Cache apt packages
+        if: matrix.platform == 'linux'
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: apt-${{ hashFiles('scripts/install-deps.sh') }}
+          restore-keys: apt-
+
+      - name: Cache Homebrew downloads
+        if: matrix.platform == 'macos'
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/Homebrew/downloads
+          key: brew-${{ hashFiles('scripts/install-deps.sh') }}
+          restore-keys: brew-
+
+      - name: Cache MSYS2 packages
+        if: matrix.platform == 'windows'
+        uses: actions/cache@v4
+        with:
+          path: C:/msys64/var/cache/pacman/pkg
+          key: msys2-${{ hashFiles('scripts/install-deps.sh') }}
+          restore-keys: msys2-
+
       - name: Install dependencies
         shell: bash
         run: ./scripts/install-deps.sh
 
       - name: Build and package FFmpeg
+        if: matrix.platform != 'windows'
+        shell: bash
+        run: ./scripts/build-ffmpeg.sh
+
+      - name: Build and package FFmpeg (Windows)
+        if: matrix.platform == 'windows'
         shell: bash
         run: |
           workspace_path="$(cygpath -u "$GITHUB_WORKSPACE")"
@@ -179,7 +165,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ffmpeg-${{ inputs.target_platform }}-${{ inputs.release_tag }}
+          name: ffmpeg-${{ matrix.platform }}-${{ inputs.release_tag }}
           path: dist/packages/*
           if-no-files-found: error
 
@@ -195,5 +181,6 @@ jobs:
             gh release create "$RELEASE_TAG" "$asset_path" \
               --draft \
               --title "FFmpeg build $RELEASE_TAG" \
-              --notes "Source: $SOURCE_REPOSITORY"$'\n'"Platform: $TARGET_PLATFORM"$'\n'"Configure: $CONFIGURE_OPTIONS"
+              --notes "Source: $SOURCE_REPOSITORY"$'\n'"Platform: $TARGET_PLATFORM"$'\n'"Configure: $CONFIGURE_OPTIONS" \
+            || gh release upload "$RELEASE_TAG" "$asset_path" --clobber
           fi

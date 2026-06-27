@@ -35,7 +35,14 @@ trap cleanup EXIT
 rm -rf "$work_root" "$dist_root"
 mkdir -p "$source_dir" "$install_root" "$package_root"
 
-git clone --depth 1 "$authenticated_repository_url" "$source_dir"
+if [[ -n "${SOURCE_REF:-}" ]]; then
+  [[ "$SOURCE_REF" =~ $SAFE_TOKEN_PATTERN ]] || fail "Unsafe SOURCE_REF: ${SOURCE_REF}"
+  # Try shallow clone for a branch or tag; fall back to full clone for a commit SHA
+  git clone --depth 1 --branch "$SOURCE_REF" "$authenticated_repository_url" "$source_dir" \
+    || { git clone "$authenticated_repository_url" "$source_dir"; git -C "$source_dir" checkout "$SOURCE_REF"; }
+else
+  git clone --depth 1 "$authenticated_repository_url" "$source_dir"
+fi
 git -C "$source_dir" remote set-url origin "$clean_repository_url"
 
 pushd "$source_dir" >/dev/null

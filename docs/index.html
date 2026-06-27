@@ -42,6 +42,12 @@
           <small>支持公有/私有 GitHub 仓库，建议使用 HTTPS 地址。</small>
         </label>
 
+        <label>
+          <span>源码分支 / tag / commit（可选）</span>
+          <input id="source-ref" name="sourceRef" type="text" placeholder="main / v7.0 / abc1234（留空则使用默认分支 HEAD）">
+          <small>留空则检出 source 仓库的默认分支 HEAD。</small>
+        </label>
+
         <div class="grid">
           <label>
             <span>目标平台</span>
@@ -49,6 +55,7 @@
               <option value="linux">Linux</option>
               <option value="macos">macOS</option>
               <option value="windows">Windows</option>
+              <option value="all">全部平台（并行）</option>
             </select>
           </label>
 
@@ -96,7 +103,13 @@
 
     <section class="card">
       <h2>最近任务</h2>
-      <div id="run-list" class="run-list empty">填写 PAT 后点击“刷新任务状态”即可查看最近 10 条 workflow_dispatch 任务。</div>
+      <div id="run-list" class="run-list empty">填写 PAT 后点击"刷新任务状态"即可查看最近 10 条 workflow_dispatch 任务。</div>
+    </section>
+
+    <section class="card">
+      <h2>本地历史记录</h2>
+      <p class="lead muted">已保存的编译任务（不含 PAT）。点击"刷新状态"可更新运行结果（需填写 PAT）。</p>
+      <div id="history-list" class="run-list empty">暂无本地历史记录。</div>
     </section>
   </main>
 
