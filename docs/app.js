@@ -236,15 +236,15 @@ function normalizeConfigurePreset() {
   textarea.value = nextValue;
 }
 
-function makeReleaseTag(targetPlatform) {
+function makeReleaseTag(targetPlatform, targetArch) {
   const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, '').toLowerCase();
   const suffix = Math.random().toString(36).slice(2, 6);
-  return `ffmpeg-${targetPlatform}-${stamp}-${suffix}`;
+  return `ffmpeg-${targetPlatform}-${targetArch}-${stamp}-${suffix}`;
 }
 
 function extractReleaseTag(run) {
   const title = run.display_title || '';
-  const match = title.match(/(ffmpeg-[a-z]+-\d{8}t\d{6}z-[a-z0-9]{4})/i);
+  const match = title.match(/(ffmpeg-[\w]+-[\w]+-\d{8}t\d{6}z-[a-z0-9]{4})/i);
   return match ? match[1] : '';
 }
 
@@ -445,7 +445,7 @@ function renderHistory() {
       run_number: entry.runNumber,
       status: entry.status || 'completed',
       conclusion: entry.conclusion || null,
-      display_title: [entry.owner, entry.platform, entry.releaseTag].filter(Boolean).join(' | '),
+      display_title: [entry.owner, entry.platform, entry.arch, entry.releaseTag].filter(Boolean).join(' | '),
       name: entry.releaseTag || '',
       html_url: entry.htmlUrl || `https://github.com/${entry.owner}/${entry.repo}/actions/runs/${entry.runId}`,
       created_at: entry.triggeredAt || new Date().toISOString(),
@@ -518,10 +518,11 @@ async function handleSubmit(event) {
   const sourceRepository = String(formData.get('sourceRepository') || '').trim();
   const sourceRef = String(formData.get('sourceRef') || '').trim();
   const targetPlatform = String(formData.get('targetPlatform') || '').trim();
+  const targetArch = String(formData.get('targetArch') || '').trim();
   const packageFormat = String(formData.get('packageFormat') || '').trim();
   const configureOptions = String(formData.get('configureOptions') || '').trim();
 
-  if (!token || !sourceRepository || !targetPlatform || !packageFormat || !configureOptions) {
+  if (!token || !sourceRepository || !targetPlatform || !targetArch || !packageFormat || !configureOptions) {
     throw new Error('请完整填写所有必填字段。');
   }
 
@@ -529,7 +530,7 @@ async function handleSubmit(event) {
   await ensureRepositoryMetadata(token);
   await ensureAuthenticatedUser(token);
 
-  const releaseTag = makeReleaseTag(targetPlatform);
+  const releaseTag = makeReleaseTag(targetPlatform, targetArch);
   state.releaseTag = releaseTag;
 
   setMessage(taskStatusNode, 'status-warn', '任务已提交，正在等待 GitHub Actions 生成运行记录…');
@@ -546,6 +547,7 @@ async function handleSubmit(event) {
         source_ref: sourceRef,
         github_pat: token,
         target_platform: targetPlatform,
+        target_arch: targetArch,
         package_format: packageFormat,
         configure_options: configureOptions,
         release_tag: releaseTag,
@@ -576,6 +578,7 @@ async function handleSubmit(event) {
     repo: state.repo,
     releaseTag,
     platform: targetPlatform,
+    arch: targetArch,
     sourceRepository,
     sourceRef,
     configureOptions,
@@ -590,7 +593,34 @@ async function handleSubmit(event) {
   await refreshRuns();
 }
 
-// ── Bootstrap ───────────────────────────────────────────────────────────────
+// ── Arch options per platform ────────────────────────────────────────────────
+
+const ARCH_OPTIONS = {
+  linux:   [['x86_64', 'x86_64'], ['x86', 'x86 (32-bit)'], ['arm64', 'arm64 (AArch64)'], ['armv7', 'armv7 (ARM 32-bit)']],
+  macos:   [['x86_64', 'x86_64 (Intel)'], ['arm64', 'arm64 (Apple Silicon)'], ['universal', 'Universal (fat binary)']],
+  windows: [['x86_64', 'x86_64'], ['x86', 'x86 (32-bit)'], ['arm64', 'arm64 (AArch64)'], ['armv7', 'armv7']],
+  all:     [['x86_64', 'x86_64'], ['arm64', 'arm64'], ['universal', 'Universal (macOS fat + x86_64 others)']],
+};
+
+const targetPlatformSelect = document.querySelector('#target-platform');
+const targetArchSelect = document.querySelector('#target-arch');
+
+function updateArchOptions() {
+  const platform = targetPlatformSelect.value;
+  const options = ARCH_OPTIONS[platform] || ARCH_OPTIONS.linux;
+  const current = targetArchSelect.value;
+  targetArchSelect.innerHTML = '';
+  options.forEach(([value, label]) => {
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = label;
+    if (value === current) opt.selected = true;
+    targetArchSelect.appendChild(opt);
+  });
+}
+
+targetPlatformSelect.addEventListener('change', updateArchOptions);
+updateArchOptions();
 
 updateDetectedRepo();
 defaultBranchNode.textContent = '待使用 PAT 查询';

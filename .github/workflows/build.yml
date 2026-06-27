@@ -25,6 +25,17 @@ on:
           - macos
           - windows
           - all
+      target_arch:
+        description: Target instruction set (universal = macOS fat binary; other platforms fall back to x86_64)
+        required: true
+        type: choice
+        options:
+          - x86_64
+          - x86
+          - arm64
+          - armv7
+          - universal
+        default: x86_64
       package_format:
         description: Output package format
         required: true
@@ -41,7 +52,7 @@ on:
         required: true
         type: string
 
-run-name: ${{ github.actor }} | ${{ inputs.target_platform }} | ${{ inputs.release_tag }}
+run-name: ${{ github.actor }} | ${{ inputs.target_platform }}/${{ inputs.target_arch }} | ${{ inputs.release_tag }}
 
 permissions:
   actions: read
@@ -52,24 +63,83 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
+      needs_lipo: ${{ steps.set-matrix.outputs.needs_lipo }}
     steps:
       - id: set-matrix
         shell: bash
         run: |
-          case "${{ inputs.target_platform }}" in
-            all)
-              echo 'matrix={"include":[{"platform":"linux","os":"ubuntu-latest"},{"platform":"macos","os":"macos-latest"},{"platform":"windows","os":"windows-latest"}]}' >> "$GITHUB_OUTPUT"
-              ;;
-            linux)
-              echo 'matrix={"include":[{"platform":"linux","os":"ubuntu-latest"}]}' >> "$GITHUB_OUTPUT"
-              ;;
-            macos)
-              echo 'matrix={"include":[{"platform":"macos","os":"macos-latest"}]}' >> "$GITHUB_OUTPUT"
-              ;;
-            windows)
-              echo 'matrix={"include":[{"platform":"windows","os":"windows-latest"}]}' >> "$GITHUB_OUTPUT"
-              ;;
-          esac
+          platform="${{ inputs.target_platform }}"
+          arch="${{ inputs.target_arch }}"
+
+          if [[ "$platform" == "all" ]]; then
+            platforms=(linux macos windows)
+          else
+            platforms=("$platform")
+          fi
+
+          entries=()
+          needs_lipo="false"
+
+          for p in "${platforms[@]}"; do
+            case "$p/$arch" in
+              linux/x86_64)
+                entries+=('{"platform":"linux","os":"ubuntu-latest","arch":"x86_64","cross_prefix":"","msys2_env":"","universal_slice":""}')
+                ;;
+              linux/x86)
+                entries+=('{"platform":"linux","os":"ubuntu-latest","arch":"x86","cross_prefix":"i686-linux-gnu-","msys2_env":"","universal_slice":""}')
+                ;;
+              linux/arm64)
+                entries+=('{"platform":"linux","os":"ubuntu-24.04-arm","arch":"arm64","cross_prefix":"","msys2_env":"","universal_slice":""}')
+                ;;
+              linux/armv7)
+                entries+=('{"platform":"linux","os":"ubuntu-latest","arch":"armv7","cross_prefix":"arm-linux-gnueabihf-","msys2_env":"","universal_slice":""}')
+                ;;
+              linux/universal)
+                # universal is macOS-only; build x86_64 for Linux
+                entries+=('{"platform":"linux","os":"ubuntu-latest","arch":"x86_64","cross_prefix":"","msys2_env":"","universal_slice":""}')
+                ;;
+              macos/x86_64)
+                entries+=('{"platform":"macos","os":"macos-13","arch":"x86_64","cross_prefix":"","msys2_env":"","universal_slice":""}')
+                ;;
+              macos/arm64)
+                entries+=('{"platform":"macos","os":"macos-latest","arch":"arm64","cross_prefix":"","msys2_env":"","universal_slice":""}')
+                ;;
+              macos/universal)
+                entries+=('{"platform":"macos","os":"macos-13","arch":"x86_64","cross_prefix":"","msys2_env":"","universal_slice":"true"}')
+                entries+=('{"platform":"macos","os":"macos-latest","arch":"arm64","cross_prefix":"","msys2_env":"","universal_slice":"true"}')
+                needs_lipo="true"
+                ;;
+              macos/x86 | macos/armv7)
+                # not applicable for macOS, skip
+                ;;
+              windows/x86_64)
+                entries+=('{"platform":"windows","os":"windows-latest","arch":"x86_64","cross_prefix":"","msys2_env":"MINGW64","universal_slice":""}')
+                ;;
+              windows/x86)
+                entries+=('{"platform":"windows","os":"windows-latest","arch":"x86","cross_prefix":"","msys2_env":"MINGW32","universal_slice":""}')
+                ;;
+              windows/arm64)
+                entries+=('{"platform":"windows","os":"windows-latest","arch":"arm64","cross_prefix":"","msys2_env":"CLANGARM64","universal_slice":""}')
+                ;;
+              windows/armv7)
+                entries+=('{"platform":"windows","os":"windows-latest","arch":"armv7","cross_prefix":"","msys2_env":"CLANGARM32","universal_slice":""}')
+                ;;
+              windows/universal)
+                # universal is macOS-only; build x86_64 for Windows
+                entries+=('{"platform":"windows","os":"windows-latest","arch":"x86_64","cross_prefix":"","msys2_env":"MINGW64","universal_slice":""}')
+                ;;
+            esac
+          done
+
+          json='{"include":['
+          first=true
+          for e in "${entries[@]}"; do
+            if $first; then json+="$e"; first=false; else json+=",$e"; fi
+          done
+          json+=']}'
+
+          echo "matrix=$json" >> "$GITHUB_OUTPUT"
+          echo "needs_lipo=$needs_lipo" >> "$GITHUB_OUTPUT"
 
   build:
     needs: setup
@@ -82,6 +152,9 @@ jobs:
       SOURCE_REF: ${{ inputs.source_ref }}
       SOURCE_PAT: ${{ inputs.github_pat }}
       TARGET_PLATFORM: ${{ matrix.platform }}
+      TARGET_ARCH: ${{ matrix.arch }}
+      CROSS_PREFIX: ${{ matrix.cross_prefix }}
+      MSYS2_ENV: ${{ matrix.msys2_env }}
       PACKAGE_FORMAT: ${{ inputs.package_format }}
       CONFIGURE_OPTIONS: ${{ inputs.configure_options }}
       RELEASE_TAG: ${{ inputs.release_tag }}
@@ -127,24 +200,24 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /var/cache/apt/archives
-          key: apt-${{ hashFiles('scripts/install-deps.sh') }}
-          restore-keys: apt-
+          key: apt-${{ matrix.arch }}-${{ hashFiles('scripts/install-deps.sh') }}
+          restore-keys: apt-${{ matrix.arch }}-
 
       - name: Cache Homebrew downloads
         if: matrix.platform == 'macos'
         uses: actions/cache@v4
         with:
           path: ~/Library/Caches/Homebrew/downloads
-          key: brew-${{ hashFiles('scripts/install-deps.sh') }}
-          restore-keys: brew-
+          key: brew-${{ matrix.arch }}-${{ hashFiles('scripts/install-deps.sh') }}
+          restore-keys: brew-${{ matrix.arch }}-
 
       - name: Cache MSYS2 packages
         if: matrix.platform == 'windows'
         uses: actions/cache@v4
         with:
           path: C:/msys64/var/cache/pacman/pkg
-          key: msys2-${{ hashFiles('scripts/install-deps.sh') }}
-          restore-keys: msys2-
+          key: msys2-${{ matrix.msys2_env }}-${{ hashFiles('scripts/install-deps.sh') }}
+          restore-keys: msys2-${{ matrix.msys2_env }}-
 
       - name: Install dependencies
         shell: bash
@@ -159,13 +232,73 @@ jobs:
         if: matrix.platform == 'windows'
         shell: bash
         run: |
+          case "${MSYS2_ENV}" in
+            MINGW64)    msys2_binpath="/mingw64/bin" ;;
+            MINGW32)    msys2_binpath="/mingw32/bin" ;;
+            CLANGARM64) msys2_binpath="/clangarm64/bin" ;;
+            CLANGARM32) msys2_binpath="/clangarm32/bin" ;;
+            *)          msys2_binpath="/usr/bin" ;;
+          esac
           workspace_path="$(cygpath -u "$GITHUB_WORKSPACE")"
-          C:/msys64/usr/bin/bash.exe -lc "export MSYSTEM=MINGW64; export CHERE_INVOKING=1; export PATH=/mingw64/bin:/usr/bin:\$PATH; cd '$workspace_path'; ./scripts/build-ffmpeg.sh"
+          C:/msys64/usr/bin/bash.exe -lc "export MSYSTEM=${MSYS2_ENV}; export CHERE_INVOKING=1; export PATH=${msys2_binpath}:/usr/bin:\$PATH; cd '${workspace_path}'; ./scripts/build-ffmpeg.sh"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ffmpeg-${{ matrix.platform }}-${{ inputs.release_tag }}
+          name: ffmpeg-${{ matrix.platform }}-${{ matrix.arch }}-${{ inputs.release_tag }}
+          path: dist/packages/*
+          if-no-files-found: error
+
+      - name: Publish draft release
+        if: matrix.universal_slice != 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          asset_path="$(find dist/packages -maxdepth 1 -type f | head -n 1)"
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "$asset_path" --clobber
+          else
+            gh release create "$RELEASE_TAG" "$asset_path" \
+              --draft \
+              --title "FFmpeg build $RELEASE_TAG" \
+              --notes "Source: $SOURCE_REPOSITORY"$'\n'"Platform: $TARGET_PLATFORM/$TARGET_ARCH"$'\n'"Configure: $CONFIGURE_OPTIONS" \
+            || gh release upload "$RELEASE_TAG" "$asset_path" --clobber
+          fi
+
+  lipo:
+    needs: [setup, build]
+    if: needs.setup.outputs.needs_lipo == 'true'
+    runs-on: macos-latest
+    env:
+      PACKAGE_FORMAT: ${{ inputs.package_format }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      SOURCE_REPOSITORY: ${{ inputs.source_repository }}
+      CONFIGURE_OPTIONS: ${{ inputs.configure_options }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Download x86_64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ffmpeg-macos-x86_64-${{ inputs.release_tag }}
+          path: artifacts/x86_64
+
+      - name: Download arm64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ffmpeg-macos-arm64-${{ inputs.release_tag }}
+          path: artifacts/arm64
+
+      - name: Merge into universal binary
+        shell: bash
+        run: ./scripts/lipo-universal.sh
+
+      - name: Upload universal artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ffmpeg-macos-universal-${{ inputs.release_tag }}
           path: dist/packages/*
           if-no-files-found: error
 
@@ -181,6 +314,6 @@ jobs:
             gh release create "$RELEASE_TAG" "$asset_path" \
               --draft \
               --title "FFmpeg build $RELEASE_TAG" \
-              --notes "Source: $SOURCE_REPOSITORY"$'\n'"Platform: $TARGET_PLATFORM"$'\n'"Configure: $CONFIGURE_OPTIONS" \
+              --notes "Source: $SOURCE_REPOSITORY"$'\n'"Platform: macos/universal"$'\n'"Configure: $CONFIGURE_OPTIONS" \
             || gh release upload "$RELEASE_TAG" "$asset_path" --clobber
           fi
