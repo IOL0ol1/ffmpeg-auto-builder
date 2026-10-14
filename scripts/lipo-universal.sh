@@ -12,6 +12,7 @@ source "$script_dir/common.sh"
 
 require_env PACKAGE_FORMAT
 require_env RELEASE_TAG
+validate_release_tag "$RELEASE_TAG"
 
 x86_artifacts="${repo_root}/artifacts/x86_64"
 arm64_artifacts="${repo_root}/artifacts/arm64"
@@ -34,7 +35,7 @@ extract_package() {
   [[ -n "$pkg" ]] || fail "No artifact found in $pkg_dir"
   case "$pkg" in
     *.tar.gz) tar -xzf "$pkg" -C "$dest" ;;
-    *.zip)    python3 -c "import zipfile, sys; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "$pkg" "$dest" ;;
+    *.zip)    unzip -q "$pkg" -d "$dest" ;;  # unzip keeps exec bits and symlinks
     *)        fail "Unknown package format: $pkg" ;;
   esac
 }
@@ -54,7 +55,8 @@ while IFS= read -r arm_file; do
   out_file="${universal_install}/${rel}"
   mkdir -p "$(dirname "$out_file")"
 
-  if [[ -f "$x86_file" ]] && file "$x86_file" | grep -q 'Mach-O'; then
+  # lipo -info accepts Mach-O executables, dylibs and static (.a) archives alike.
+  if [[ -f "$x86_file" ]] && lipo -info "$x86_file" >/dev/null 2>&1; then
     lipo -create "$x86_file" "$arm_file" -output "$out_file" \
       || { echo "lipo failed for $rel, keeping x86_64 copy" >&2; cp "$x86_file" "$out_file"; }
   elif [[ ! -e "$out_file" ]]; then
@@ -70,7 +72,7 @@ case "$PACKAGE_FORMAT" in
     tar -C "$universal_install" -czf "${package_root}/${package_name}.tar.gz" .
     ;;
   zip)
-    (cd "$universal_install" && zip -qr "${package_root}/${package_name}.zip" .)
+    (cd "$universal_install" && zip -qry "${package_root}/${package_name}.zip" .)
     ;;
   *)
     fail "Unsupported package format: $PACKAGE_FORMAT"

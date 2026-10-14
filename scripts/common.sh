@@ -2,6 +2,7 @@
 set -euo pipefail
 
 readonly SAFE_TOKEN_PATTERN='^[-+./:=,@%A-Za-z0-9_]+$'
+readonly RELEASE_TAG_PATTERN='^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
 
 fail() {
   echo "ERROR: $*" >&2
@@ -15,29 +16,23 @@ require_env() {
   fi
 }
 
-normalize_repository_url() {
+# Print "owner/repo" for a GitHub repository URL (HTTPS or SSH form).
+parse_repository_slug() {
   local raw="$1"
-  local cleaned="${raw%.git}"
+  local cleaned="${raw%/}"
+  cleaned="${cleaned%.git}"
 
-  if [[ "$cleaned" =~ ^https://github\.com/([^/]+)/([^/]+)$ ]]; then
-    printf 'https://github.com/%s/%s.git\n' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"
-    return 0
-  fi
-
-  if [[ "$cleaned" =~ ^git@github\.com:([^/]+)/([^/]+)$ ]]; then
-    printf 'https://github.com/%s/%s.git\n' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"
+  if [[ "$cleaned" =~ ^https?://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)$ ]] \
+    || [[ "$cleaned" =~ ^git@github\.com:([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)$ ]]; then
+    printf '%s/%s\n' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"
     return 0
   fi
 
   fail "Only GitHub repository URLs are supported: ${raw}"
 }
 
-build_authenticated_repository_url() {
-  local repository_url="$1"
-  local token="$2"
-  local encoded_token
-  encoded_token="$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$token")"
-  printf '%s\n' "${repository_url/https:\/\//https:\/\/x-access-token:${encoded_token}@}"
+validate_release_tag() {
+  [[ "$1" =~ $RELEASE_TAG_PATTERN ]] || fail "Unsafe release tag: $1"
 }
 
 sanitize_configure_options() {

@@ -10,6 +10,8 @@ const linkTemplate = document.querySelector('#link-template');
 
 const HISTORY_KEY = 'ffmpeg-build-history-v1';
 const HISTORY_MAX = 30;
+const POLL_INTERVAL_MS = 10000;
+const POLL_MAX_FAILURES = 5;
 
 const state = {
   owner: '',
@@ -19,6 +21,7 @@ const state = {
   releaseTag: '',
   runId: null,
   currentUser: '',
+  canPush: false,
   pollHandle: null,
 };
 
@@ -111,14 +114,15 @@ async function ensureRepositoryMetadata(token) {
 
   const repo = await githubFetch(`/repos/${state.owner}/${state.repo}`, token);
   state.defaultBranch = repo.default_branch;
+  state.canPush = Boolean(repo.permissions?.push);
   defaultBranchNode.textContent = repo.default_branch;
 }
 
-async function ensureAuthenticatedUser(token) {
+async function ensureWriteAccess(token) {
   const user = await githubFetch('/user', token);
   state.currentUser = user.login;
-  if (user.login.toLowerCase() !== state.owner.toLowerCase()) {
-    throw new Error(`当前 PAT 属于 ${user.login}，与当前 Fork 仓库所有者 ${state.owner} 不一致。请使用当前 Fork 所有者自己的 PAT。`);
+  if (!state.canPush) {
+    throw new Error(`当前 PAT 所属账号 ${user.login} 对 ${state.owner}/${state.repo} 没有写权限，无法触发工作流。`);
   }
 }
 
@@ -244,7 +248,7 @@ function makeReleaseTag(targetPlatform, targetArch) {
 
 function extractReleaseTag(run) {
   const title = run.display_title || '';
-  const match = title.match(/(ffmpeg-[\w]+-[\w]+-\d{8}t\d{6}z-[a-z0-9]{4})/i);
+  const match = title.match(/(ffmpeg-\w+-\w+-\d{8}t\d{6}-[a-z0-9]{4})/i);
   return match ? match[1] : '';
 }
 
@@ -288,19 +292,26 @@ function buildList(items) {
 
 // ── Run data loaders ────────────────────────────────────────────────────────
 
+async function findReleaseByTag(releaseTag, token) {
+  // GET /releases/tags/{tag} only returns published releases, so search the list for drafts.
+  const releases = await githubFetch(`/repos/${state.owner}/${state.repo}/releases?per_page=50`, token);
+  return (releases || []).find((release) => release.tag_name === releaseTag) || null;
+}
+
 async function loadRunDownloads(runId, releaseTag, token) {
   const [artifactsPayload, releasePayload] = await Promise.all([
     githubFetch(`/repos/${state.owner}/${state.repo}/actions/runs/${runId}/artifacts`, token),
-    releaseTag
-      ? githubFetch(`/repos/${state.owner}/${state.repo}/releases/tags/${releaseTag}`, token).catch(() => null)
-      : Promise.resolve(null),
+    releaseTag ? findReleaseByTag(releaseTag, token).catch(() => null) : Promise.resolve(null),
   ]);
 
   const items = [
-    ...(artifactsPayload?.artifacts || []).map((artifact) => ({
-      label: `Artifact：${artifact.name}`,
-      href: artifact.archive_download_url,
-    })),
+    ...(artifactsPayload?.artifacts || [])
+      .filter((artifact) => !artifact.name.startsWith('slice-'))
+      .map((artifact) => ({
+        label: `Artifact：${artifact.name}`,
+        // Browser-friendly page; archive_download_url requires an Authorization header.
+        href: `https://github.com/${state.owner}/${state.repo}/actions/runs/${runId}/artifacts/${artifact.id}`,
+      })),
   ];
 
   if (releasePayload?.html_url) {
@@ -327,10 +338,13 @@ function renderTaskStatus(run, links = []) {
   taskStatusNode.innerHTML = '';
 
   const summary = document.createElement('div');
-  summary.innerHTML = `
-    <p><strong>Run #${run.run_number}</strong>：${statusLabel(run)}</p>
-    <p>平台：${run.display_title || run.name}</p>
-  `;
+  const headline = document.createElement('p');
+  const strong = document.createElement('strong');
+  strong.textContent = `Run #${run.run_number}`;
+  headline.append(strong, `：${statusLabel(run)}`);
+  const platformLine = document.createElement('p');
+  platformLine.textContent = `平台：${run.display_title || run.name}`;
+  summary.append(headline, platformLine);
 
   const actionLink = document.createElement('p');
   const a = document.createElement('a');
@@ -352,7 +366,11 @@ function buildRunCard(run, fromHistory = false) {
   const releaseTag = extractReleaseTag(run);
 
   const header = document.createElement('header');
-  header.innerHTML = `<h3>Run #${run.run_number} · ${statusLabel(run)}</h3><span>${new Date(run.created_at).toLocaleString()}</span>`;
+  const heading = document.createElement('h3');
+  heading.textContent = `Run #${run.run_number} · ${statusLabel(run)}`;
+  const time = document.createElement('span');
+  time.textContent = new Date(run.created_at).toLocaleString();
+  header.append(heading, time);
   card.appendChild(header);
 
   const titleP = document.createElement('p');
@@ -474,13 +492,29 @@ async function refreshRuns() {
 
   state.token = token;
   await ensureRepositoryMetadata(token);
-  await ensureAuthenticatedUser(token);
+  await ensureWriteAccess(token);
 
   const payload = await githubFetch(
     `/repos/${state.owner}/${state.repo}/actions/workflows/build.yml/runs?event=workflow_dispatch&per_page=10`,
     token,
   );
   renderRunList(payload.workflow_runs || []);
+}
+
+function schedulePoll(runId, releaseTag, token, failures = 0) {
+  if (state.pollHandle) {
+    window.clearTimeout(state.pollHandle);
+  }
+
+  state.pollHandle = window.setTimeout(() => {
+    pollRun(runId, releaseTag, token).catch((error) => {
+      if (failures + 1 >= POLL_MAX_FAILURES) {
+        setMessage(taskStatusNode, 'status-error', `状态轮询已停止：${error.message}`);
+        return;
+      }
+      schedulePoll(runId, releaseTag, token, failures + 1);
+    });
+  }, POLL_INTERVAL_MS * (failures + 1));
 }
 
 async function pollRun(runId, releaseTag, token) {
@@ -502,11 +536,7 @@ async function pollRun(runId, releaseTag, token) {
   renderHistory();
 
   if (run.status !== 'completed') {
-    state.pollHandle = window.setTimeout(() => {
-      pollRun(runId, releaseTag, token).catch((error) => {
-        setMessage(taskStatusNode, 'status-error', error.message);
-      });
-    }, 10000);
+    schedulePoll(runId, releaseTag, token);
   }
 }
 
@@ -528,24 +558,24 @@ async function handleSubmit(event) {
 
   state.token = token;
   await ensureRepositoryMetadata(token);
-  await ensureAuthenticatedUser(token);
+  await ensureWriteAccess(token);
 
   const releaseTag = makeReleaseTag(targetPlatform, targetArch);
   state.releaseTag = releaseTag;
 
   setMessage(taskStatusNode, 'status-warn', '任务已提交，正在等待 GitHub Actions 生成运行记录…');
 
-  await githubFetch(`/repos/${state.owner}/${state.repo}/actions/workflows/build.yml/dispatches`, token, {
+  const dispatch = await githubFetch(`/repos/${state.owner}/${state.repo}/actions/workflows/build.yml/dispatches`, token, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
       ref: state.defaultBranch,
+      return_run_details: true,
       inputs: {
         source_repository: sourceRepository,
         source_ref: sourceRef,
-        github_pat: token,
         target_platform: targetPlatform,
         target_arch: targetArch,
         package_format: packageFormat,
@@ -556,12 +586,15 @@ async function handleSubmit(event) {
   });
 
   let run = null;
-  for (let attempt = 0; attempt < 12; attempt += 1) {
+  if (dispatch?.workflow_run_id) {
+    run = await githubFetch(`/repos/${state.owner}/${state.repo}/actions/runs/${dispatch.workflow_run_id}`, token);
+  }
+  // Fallback for responses without run details: look the run up by its release tag.
+  for (let attempt = 0; !run && attempt < 12; attempt += 1) {
     run = await findTriggeredRun(token, releaseTag);
-    if (run) {
-      break;
+    if (!run) {
+      await new Promise((resolve) => window.setTimeout(resolve, 5000));
     }
-    await new Promise((resolve) => window.setTimeout(resolve, 5000));
   }
 
   if (!run) {
@@ -598,7 +631,7 @@ async function handleSubmit(event) {
 const ARCH_OPTIONS = {
   linux:   [['x86_64', 'x86_64'], ['x86', 'x86 (32-bit)'], ['arm64', 'arm64 (AArch64)'], ['armv7', 'armv7 (ARM 32-bit)']],
   macos:   [['x86_64', 'x86_64 (Intel)'], ['arm64', 'arm64 (Apple Silicon)'], ['universal', 'Universal (fat binary)']],
-  windows: [['x86_64', 'x86_64'], ['x86', 'x86 (32-bit)'], ['arm64', 'arm64 (AArch64)'], ['armv7', 'armv7']],
+  windows: [['x86_64', 'x86_64'], ['x86', 'x86 (32-bit，实验性)'], ['arm64', 'arm64 (AArch64)']],
   all:     [['x86_64', 'x86_64'], ['arm64', 'arm64'], ['universal', 'Universal (macOS fat + x86_64 others)']],
 };
 
@@ -627,10 +660,16 @@ defaultBranchNode.textContent = '待使用 PAT 查询';
 renderHistory();
 
 applyPresetButton.addEventListener('click', normalizeConfigurePreset);
+const submitButton = form.querySelector('button[type="submit"]');
 form.addEventListener('submit', (event) => {
-  handleSubmit(event).catch((error) => {
-    setMessage(taskStatusNode, 'status-error', error.message);
-  });
+  submitButton.disabled = true;
+  handleSubmit(event)
+    .catch((error) => {
+      setMessage(taskStatusNode, 'status-error', error.message);
+    })
+    .finally(() => {
+      submitButton.disabled = false;
+    });
 });
 refreshRunsButton.addEventListener('click', () => {
   refreshRuns().catch((error) => {

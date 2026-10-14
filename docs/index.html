@@ -31,21 +31,21 @@
       <h2>提交编译任务</h2>
       <form id="build-form" class="build-form">
         <label>
-          <span>GitHub Classic PAT</span>
-          <input id="pat" name="pat" type="password" autocomplete="new-password" placeholder="ghp_xxx..." required>
-          <small>仅保存在当前浏览器内存中，不写入本地存储。需要至少具备 <code>repo</code> 与 <code>workflow</code> 权限。</small>
+          <span>GitHub PAT（用于触发工作流）</span>
+          <input id="pat" name="pat" type="password" autocomplete="new-password" placeholder="github_pat_xxx / ghp_xxx" required>
+          <small>仅保存在当前浏览器内存中，不会传给工作流。Fine-grained PAT 需要本仓库的 <code>Actions</code> 与 <code>Contents</code> 读写权限；Classic PAT 需要 <code>repo</code> 与 <code>workflow</code>。</small>
         </label>
 
         <label>
           <span>FFmpeg Git 仓库地址</span>
-          <input id="source-repository" name="sourceRepository" type="url" placeholder="https://github.com/your-name/ffmpeg.git" required>
-          <small>支持公有/私有 GitHub 仓库，建议使用 HTTPS 地址。</small>
+          <input id="source-repository" name="sourceRepository" type="text" inputmode="url" placeholder="https://github.com/FFmpeg/FFmpeg 或 git@github.com:your-name/ffmpeg.git" required>
+          <small>支持公有/私有 GitHub 仓库（HTTPS 或 SSH 写法）。私有仓库需先在本仓库配置 <code>SOURCE_PAT</code> Secret。</small>
         </label>
 
         <label>
           <span>源码分支 / tag / commit（可选）</span>
-          <input id="source-ref" name="sourceRef" type="text" placeholder="main / v7.0 / abc1234（留空则使用默认分支 HEAD）">
-          <small>留空则检出 source 仓库的默认分支 HEAD。</small>
+          <input id="source-ref" name="sourceRef" type="text" placeholder="master / n7.1 / 完整 40 位 commit SHA（留空则使用默认分支 HEAD）">
+          <small>commit 需填写完整 40 位 SHA；留空则检出源码仓库的默认分支 HEAD。</small>
         </label>
 
         <div class="grid">
