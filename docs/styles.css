@@ -272,3 +272,18 @@ code {
   list-style: none;
   color: var(--muted);
 }
+
+.form-message:empty {
+  display: none;
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.section-head h2 {
+  margin-bottom: 0;
+}

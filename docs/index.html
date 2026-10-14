@@ -12,8 +12,8 @@
       <p class="eyebrow">GitHub Pages + GitHub Actions</p>
       <h1>FFmpeg 在线自动编译</h1>
       <p class="lead">
-        纯 GitHub 生态、可 Fork 自用的 FFmpeg 在线编译页。页面会自动识别当前 Fork 仓库，并使用你提供的 GitHub PAT
-        触发本仓库的 Actions 工作流。
+        纯 GitHub 生态、可 Fork 自用的 FFmpeg 在线编译页。填写参数后，页面会生成一个预填好的编译 Issue，
+        你在 GitHub 上确认提交即可触发编译，全程无需输入任何令牌。
       </p>
       <dl class="repo-summary">
         <div>
@@ -21,8 +21,8 @@
           <dd id="detected-repo">识别中…</dd>
         </div>
         <div>
-          <dt>默认分支</dt>
-          <dd id="default-branch">识别中…</dd>
+          <dt>Issues 功能</dt>
+          <dd id="issues-status">检测中…</dd>
         </div>
       </dl>
     </section>
@@ -31,14 +31,8 @@
       <h2>提交编译任务</h2>
       <form id="build-form" class="build-form">
         <label>
-          <span>GitHub PAT（用于触发工作流）</span>
-          <input id="pat" name="pat" type="password" autocomplete="new-password" placeholder="github_pat_xxx / ghp_xxx" required>
-          <small>仅保存在当前浏览器内存中，不会传给工作流。Fine-grained PAT 需要本仓库的 <code>Actions</code> 与 <code>Contents</code> 读写权限；Classic PAT 需要 <code>repo</code> 与 <code>workflow</code>。</small>
-        </label>
-
-        <label>
           <span>FFmpeg Git 仓库地址</span>
-          <input id="source-repository" name="sourceRepository" type="text" inputmode="url" placeholder="https://github.com/FFmpeg/FFmpeg 或 git@github.com:your-name/ffmpeg.git" required>
+          <input id="source-repository" name="sourceRepository" type="text" inputmode="url" value="https://github.com/FFmpeg/FFmpeg" placeholder="https://github.com/FFmpeg/FFmpeg 或 git@github.com:your-name/ffmpeg.git" required>
           <small>支持公有/私有 GitHub 仓库（HTTPS 或 SSH 写法）。私有仓库需先在本仓库配置 <code>SOURCE_PAT</code> Secret。</small>
         </label>
 
@@ -91,38 +85,29 @@
         <label>
           <span>configure 编译参数</span>
           <textarea id="configure-options" name="configureOptions" rows="7" placeholder="--disable-debug --disable-doc --enable-gpl" required></textarea>
-          <small>仅支持安全字符集，脚本会拒绝 <code>;</code>、<code>&amp;</code>、<code>|</code>、<code>$</code>、<code>&gt;</code>、<code>`</code> 等危险字符。</small>
+          <small>仅支持安全字符集，会拒绝 <code>;</code>、<code>&amp;</code>、<code>|</code>、<code>$</code>、<code>&gt;</code>、<code>`</code> 等危险字符。</small>
         </label>
 
         <div class="actions">
-          <button type="submit">触发编译</button>
-          <button id="refresh-runs" type="button" class="secondary">刷新任务状态</button>
+          <button type="submit">在 GitHub 上提交编译</button>
         </div>
+        <p id="form-message" class="form-message"></p>
+        <small>
+          点击后会打开 GitHub 的新建 Issue 页面并自动填好参数，确认后点击 <strong>Submit new issue</strong> 即开始编译。
+          只有仓库所有者和协作者提交的 Issue 才会被执行；进度与下载链接会以评论形式回复在该 Issue 中。
+        </small>
       </form>
     </section>
 
     <section class="card">
-      <h2>当前任务状态</h2>
-      <div id="task-status" class="status-panel empty">
-        提交任务后，这里会显示 Workflow 运行状态、Artifact 链接与 Draft Release 链接。
+      <div class="section-head">
+        <h2>编译记录</h2>
+        <button id="refresh-builds" type="button" class="secondary">刷新</button>
       </div>
-    </section>
-
-    <section class="card">
-      <h2>最近任务</h2>
-      <div id="run-list" class="run-list empty">填写 PAT 后点击"刷新任务状态"即可查看最近 10 条 workflow_dispatch 任务。</div>
-    </section>
-
-    <section class="card">
-      <h2>本地历史记录</h2>
-      <p class="lead muted">已保存的编译任务（不含 PAT）。点击"刷新状态"可更新运行结果（需填写 PAT）。</p>
-      <div id="history-list" class="run-list empty">暂无本地历史记录。</div>
+      <p class="lead muted">最近 20 个编译 Issue。进行中的任务每 2 分钟自动刷新一次（未登录的 GitHub API 每小时限 60 次请求）。</p>
+      <div id="build-list" class="run-list empty">加载中…</div>
     </section>
   </main>
-
-  <template id="link-template">
-    <li><a target="_blank" rel="noreferrer"></a></li>
-  </template>
 
   <script type="module" src="./app.js"></script>
 </body>

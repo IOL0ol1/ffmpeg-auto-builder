@@ -1,6 +1,10 @@
 name: build-ffmpeg
 
 on:
+  # Main entry: an issue created from .github/ISSUE_TEMPLATE/build.yml (the Pages site pre-fills it).
+  issues:
+    types: [opened]
+  # Fallback: Actions → build-ffmpeg → Run workflow.
   workflow_dispatch:
     inputs:
       source_repository:
@@ -8,7 +12,7 @@ on:
         required: true
         type: string
       source_ref:
-        description: Branch / tag / commit to checkout (leave empty for default branch HEAD)
+        description: Branch / tag / full commit SHA (leave empty for default branch HEAD)
         required: false
         type: string
         default: ''
@@ -43,101 +47,113 @@ on:
         description: FFmpeg configure options
         required: true
         type: string
-      release_tag:
-        description: Draft release tag for this build
-        required: true
-        type: string
 
-run-name: ${{ github.actor }} | ${{ inputs.target_platform }}/${{ inputs.target_arch }} | ${{ inputs.release_tag }}
+run-name: >-
+  ${{ github.event_name == 'issues'
+      && format('#{0} {1}', github.event.issue.number, github.event.issue.title)
+      || format('{0} | {1}/{2}', github.actor, inputs.target_platform, inputs.target_arch) }}
 
 permissions:
   actions: read
   contents: write
+  issues: write
 
 jobs:
   setup:
+    # Issues are public: only build requests from people with write access are executed.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (startsWith(github.event.issue.title, '[build]') &&
+       contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.issue.author_association))
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
-      needs_lipo: ${{ steps.set-matrix.outputs.needs_lipo }}
-      source_slug: ${{ steps.validate.outputs.source_slug }}
+      source_repository: ${{ steps.params.outputs.source_repository }}
+      source_slug: ${{ steps.params.outputs.source_slug }}
+      source_ref: ${{ steps.params.outputs.source_ref }}
+      target_platform: ${{ steps.params.outputs.target_platform }}
+      target_arch: ${{ steps.params.outputs.target_arch }}
+      package_format: ${{ steps.params.outputs.package_format }}
+      configure_options: ${{ steps.params.outputs.configure_options }}
+      release_tag: ${{ steps.params.outputs.release_tag }}
+      matrix: ${{ steps.params.outputs.matrix }}
+      needs_lipo: ${{ steps.params.outputs.needs_lipo }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Validate inputs
-        id: validate
+      - name: Resolve build parameters
+        id: params
         shell: bash
         env:
-          SOURCE_REPOSITORY: ${{ inputs.source_repository }}
-          CONFIGURE_OPTIONS: ${{ inputs.configure_options }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
+          EVENT_NAME: ${{ github.event_name }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          INPUT_SOURCE_REPOSITORY: ${{ inputs.source_repository }}
+          INPUT_SOURCE_REF: ${{ inputs.source_ref }}
+          INPUT_TARGET_PLATFORM: ${{ inputs.target_platform }}
+          INPUT_TARGET_ARCH: ${{ inputs.target_arch }}
+          INPUT_PACKAGE_FORMAT: ${{ inputs.package_format }}
+          INPUT_CONFIGURE_OPTIONS: ${{ inputs.configure_options }}
         run: |
-          source scripts/common.sh
-          validate_release_tag "$RELEASE_TAG"
-          sanitize_configure_options "$CONFIGURE_OPTIONS"
-          slug="$(parse_repository_slug "$SOURCE_REPOSITORY")"
-          echo "source_slug=$slug" >> "$GITHUB_OUTPUT"
-
-      - name: Build matrix
-        id: set-matrix
-        shell: bash
-        env:
-          PLATFORM: ${{ inputs.target_platform }}
-          ARCH: ${{ inputs.target_arch }}
-        run: |
-          if [[ "$PLATFORM" == "all" ]]; then
-            platforms=(linux macos windows)
-          else
-            platforms=("$PLATFORM")
-          fi
-
-          entries='[]'
-          needs_lipo="false"
-
-          # add <platform> <runner> <arch> [cross_prefix] [msystem] [msys2_packages] [universal_slice]
-          add() {
-            entries="$(jq -c \
-              --arg platform "$1" --arg os "$2" --arg arch "$3" \
-              --arg cross_prefix "${4:-}" --arg msystem "${5:-}" \
-              --arg msys2_packages "${6:-}" --arg universal_slice "${7:-}" \
-              '. + [$ARGS.named]' <<<"$entries")"
-          }
-
-          mingw64_pkgs="make diffutils zip mingw-w64-x86_64-toolchain mingw-w64-x86_64-pkgconf mingw-w64-x86_64-nasm mingw-w64-x86_64-ccache"
-          mingw32_pkgs="make diffutils zip mingw-w64-i686-toolchain mingw-w64-i686-pkgconf mingw-w64-i686-nasm mingw-w64-i686-ccache"
-          clangarm64_pkgs="make diffutils zip mingw-w64-clang-aarch64-toolchain mingw-w64-clang-aarch64-pkgconf mingw-w64-clang-aarch64-ccache"
-
-          for p in "${platforms[@]}"; do
-            case "$p/$ARCH" in
-              linux/x86_64 | linux/universal) add linux ubuntu-latest x86_64 ;;
-              linux/x86)       add linux ubuntu-latest x86 i686-linux-gnu- ;;
-              linux/arm64)     add linux ubuntu-24.04-arm arm64 ;;
-              linux/armv7)     add linux ubuntu-latest armv7 arm-linux-gnueabihf- ;;
-              macos/x86_64)    add macos macos-15-intel x86_64 ;;
-              macos/arm64)     add macos macos-15 arm64 ;;
-              macos/universal)
-                add macos macos-15-intel x86_64 "" "" "" true
-                add macos macos-15 arm64 "" "" "" true
-                needs_lipo="true"
-                ;;
-              windows/x86_64 | windows/universal) add windows windows-latest x86_64 "" MINGW64 "$mingw64_pkgs" ;;
-              windows/x86)     add windows windows-latest x86 "" MINGW32 "$mingw32_pkgs" ;;
-              windows/arm64)   add windows windows-11-arm arm64 "" CLANGARM64 "$clangarm64_pkgs" ;;
-              *) echo "::warning::Skipping unsupported combination $p/$ARCH" ;;
-            esac
-          done
-
-          if [[ "$(jq length <<<"$entries")" -eq 0 ]]; then
-            echo "::error::No buildable target for $PLATFORM/$ARCH"
+          if ! ./scripts/resolve-params.sh 2>"$RUNNER_TEMP/resolve-error.log"; then
+            cat "$RUNNER_TEMP/resolve-error.log" >&2
             exit 1
           fi
 
-          echo "matrix={\"include\":$entries}" >> "$GITHUB_OUTPUT"
-          echo "needs_lipo=$needs_lipo" >> "$GITHUB_OUTPUT"
+      - name: Report invalid request
+        if: failure() && github.event_name == 'issues'
+        shell: bash
+        run: |
+          {
+            echo "❌ 参数校验失败，未开始编译。"
+            echo
+            echo '```text'
+            cat "$RUNNER_TEMP/resolve-error.log" 2>/dev/null || true
+            echo '```'
+            echo
+            echo "运行日志：$RUN_URL"
+            echo
+            echo "请修正参数后重新提交一个新的 Issue。"
+          } > "$RUNNER_TEMP/comment.md"
+          gh issue comment "$ISSUE_NUMBER" --body-file "$RUNNER_TEMP/comment.md"
+          gh issue close "$ISSUE_NUMBER" --reason "not planned"
+
+      - name: Acknowledge request
+        if: github.event_name == 'issues'
+        shell: bash
+        env:
+          SOURCE_REPOSITORY: ${{ steps.params.outputs.source_repository }}
+          SOURCE_REF: ${{ steps.params.outputs.source_ref }}
+          TARGET: ${{ steps.params.outputs.target_platform }}/${{ steps.params.outputs.target_arch }}
+          PACKAGE_FORMAT: ${{ steps.params.outputs.package_format }}
+          CONFIGURE_OPTIONS: ${{ steps.params.outputs.configure_options }}
+          RELEASE_TAG: ${{ steps.params.outputs.release_tag }}
+        run: |
+          gh label create build --color 0969da --description "FFmpeg build request" >/dev/null 2>&1 || true
+          gh issue edit "$ISSUE_NUMBER" --add-label build >/dev/null 2>&1 || true
+          {
+            echo "🚀 已开始编译，完成后会在这里回复下载链接。"
+            echo
+            echo "| 参数 | 值 |"
+            echo "|---|---|"
+            echo "| 源码 | $SOURCE_REPOSITORY |"
+            echo "| ref | ${SOURCE_REF:-（默认分支）} |"
+            echo "| 目标 | \`$TARGET\` |"
+            echo "| 打包格式 | \`$PACKAGE_FORMAT\` |"
+            echo "| Release tag | \`$RELEASE_TAG\` |"
+            echo "| configure | \`$CONFIGURE_OPTIONS\` |"
+            echo
+            echo "运行进度：$RUN_URL"
+          } > "$RUNNER_TEMP/comment.md"
+          gh issue comment "$ISSUE_NUMBER" --body-file "$RUNNER_TEMP/comment.md"
 
   build:
+    name: build ${{ matrix.platform }}/${{ matrix.arch }}
     needs: setup
     strategy:
       fail-fast: false
@@ -145,14 +161,14 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 180
     env:
-      SOURCE_REPOSITORY: ${{ inputs.source_repository }}
-      SOURCE_REF: ${{ inputs.source_ref }}
+      SOURCE_REPOSITORY: ${{ needs.setup.outputs.source_repository }}
+      SOURCE_REF: ${{ needs.setup.outputs.source_ref }}
       TARGET_PLATFORM: ${{ matrix.platform }}
       TARGET_ARCH: ${{ matrix.arch }}
       CROSS_PREFIX: ${{ matrix.cross_prefix }}
-      PACKAGE_FORMAT: ${{ inputs.package_format }}
-      CONFIGURE_OPTIONS: ${{ inputs.configure_options }}
-      RELEASE_TAG: ${{ inputs.release_tag }}
+      PACKAGE_FORMAT: ${{ needs.setup.outputs.package_format }}
+      CONFIGURE_OPTIONS: ${{ needs.setup.outputs.configure_options }}
+      RELEASE_TAG: ${{ needs.setup.outputs.release_tag }}
       MACOSX_DEPLOYMENT_TARGET: '11.0'
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       CCACHE_MAXSIZE: 500M
@@ -169,7 +185,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ${{ needs.setup.outputs.source_slug }}
-          ref: ${{ inputs.source_ref }}
+          ref: ${{ needs.setup.outputs.source_ref }}
           # Falls back to the workflow token, which can read public repositories.
           token: ${{ secrets.SOURCE_PAT || github.token }}
           path: ffmpeg-src
@@ -214,7 +230,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           # Universal slices get a separate prefix so the release job does not publish them.
-          name: ${{ matrix.universal_slice == 'true' && 'slice' || 'ffmpeg' }}-${{ matrix.platform }}-${{ matrix.arch }}-${{ inputs.release_tag }}
+          name: ${{ matrix.universal_slice == 'true' && 'slice' || 'ffmpeg' }}-${{ matrix.platform }}-${{ matrix.arch }}-${{ needs.setup.outputs.release_tag }}
           path: dist/packages/*
           if-no-files-found: error
 
@@ -224,8 +240,8 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 30
     env:
-      PACKAGE_FORMAT: ${{ inputs.package_format }}
-      RELEASE_TAG: ${{ inputs.release_tag }}
+      PACKAGE_FORMAT: ${{ needs.setup.outputs.package_format }}
+      RELEASE_TAG: ${{ needs.setup.outputs.release_tag }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -233,13 +249,13 @@ jobs:
       - name: Download x86_64 artifact
         uses: actions/download-artifact@v4
         with:
-          name: slice-macos-x86_64-${{ inputs.release_tag }}
+          name: slice-macos-x86_64-${{ needs.setup.outputs.release_tag }}
           path: artifacts/x86_64
 
       - name: Download arm64 artifact
         uses: actions/download-artifact@v4
         with:
-          name: slice-macos-arm64-${{ inputs.release_tag }}
+          name: slice-macos-arm64-${{ needs.setup.outputs.release_tag }}
           path: artifacts/arm64
 
       - name: Merge into universal binary
@@ -249,7 +265,7 @@ jobs:
       - name: Upload universal artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ffmpeg-macos-universal-${{ inputs.release_tag }}
+          name: ffmpeg-macos-universal-${{ needs.setup.outputs.release_tag }}
           path: dist/packages/*
           if-no-files-found: error
 
@@ -262,20 +278,23 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
-      RELEASE_TAG: ${{ inputs.release_tag }}
-      SOURCE_REPOSITORY: ${{ inputs.source_repository }}
-      SOURCE_REF: ${{ inputs.source_ref }}
-      TARGET: ${{ inputs.target_platform }}/${{ inputs.target_arch }}
-      CONFIGURE_OPTIONS: ${{ inputs.configure_options }}
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      RELEASE_TAG: ${{ needs.setup.outputs.release_tag }}
+      SOURCE_REPOSITORY: ${{ needs.setup.outputs.source_repository }}
+      SOURCE_REF: ${{ needs.setup.outputs.source_ref }}
+      TARGET: ${{ needs.setup.outputs.target_platform }}/${{ needs.setup.outputs.target_arch }}
+      CONFIGURE_OPTIONS: ${{ needs.setup.outputs.configure_options }}
     steps:
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: ffmpeg-*-${{ inputs.release_tag }}
+          pattern: ffmpeg-*-${{ needs.setup.outputs.release_tag }}
           path: release-assets
           merge-multiple: true
 
       - name: Publish draft release
+        id: publish
         shell: bash
         run: |
           shopt -s nullglob
@@ -292,9 +311,52 @@ jobs:
             echo "Ref: ${SOURCE_REF:-<default branch>}"
             echo "Target: $TARGET"
             echo "Configure: \`$CONFIGURE_OPTIONS\`"
-          } > ../notes.md
+            if [[ -n "$ISSUE_NUMBER" ]]; then
+              echo "Request: #$ISSUE_NUMBER"
+            fi
+          } > "$RUNNER_TEMP/notes.md"
 
-          gh release create "$RELEASE_TAG" "${assets[@]}" SHA256SUMS.txt \
+          release_url="$(gh release create "$RELEASE_TAG" "${assets[@]}" SHA256SUMS.txt \
             --draft \
             --title "FFmpeg build $RELEASE_TAG" \
-            --notes-file ../notes.md
+            --notes-file "$RUNNER_TEMP/notes.md")"
+          echo "release_url=$release_url" >> "$GITHUB_OUTPUT"
+
+      - name: Report result on issue
+        if: always() && github.event_name == 'issues'
+        shell: bash
+        env:
+          PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
+          RELEASE_URL: ${{ steps.publish.outputs.release_url }}
+        run: |
+          jobs_json="$(gh api "repos/$GH_REPO/actions/runs/$GITHUB_RUN_ID/jobs?per_page=100")"
+          job_rows="$(jq -r '.jobs[]
+            | select(.name != "setup" and (.name | startswith("release") | not))
+            | "| \(.name) | \(if .conclusion == "success" then "✅" elif .conclusion == "skipped" then "⏭" else "❌" end) \(.conclusion // .status) |"' <<<"$jobs_json")"
+          failed_count="$(jq '[.jobs[] | select(.name != "setup" and (.name | startswith("release") | not))
+            | select(.conclusion != "success" and .conclusion != "skipped")] | length' <<<"$jobs_json")"
+
+          {
+            if [[ "$PUBLISH_OUTCOME" == "success" && "$failed_count" -eq 0 ]]; then
+              echo "✅ 编译完成。"
+            elif [[ "$PUBLISH_OUTCOME" == "success" ]]; then
+              echo "⚠️ 部分目标编译失败，成功的产物已发布。"
+            else
+              echo "❌ 编译失败，没有可发布的产物。"
+            fi
+            echo
+            if [[ -n "$RELEASE_URL" ]]; then
+              echo "- Draft Release（含 \`SHA256SUMS.txt\`）：$RELEASE_URL"
+              echo "  草稿仅仓库所有者和协作者可见，确认无误后可在 Release 页面点击 Publish 公开发布。"
+            fi
+            echo "- 运行详情与 Artifact：$RUN_URL"
+            echo
+            echo "| 任务 | 结果 |"
+            echo "|---|---|"
+            echo "$job_rows"
+          } > "$RUNNER_TEMP/comment.md"
+          gh issue comment "$ISSUE_NUMBER" --body-file "$RUNNER_TEMP/comment.md"
+
+          if [[ "$PUBLISH_OUTCOME" == "success" ]]; then
+            gh issue close "$ISSUE_NUMBER" --reason completed
+          fi
