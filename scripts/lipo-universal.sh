@@ -66,7 +66,7 @@ done < <(find "$arm64_install" -type f)
 
 # ── Package ───────────────────────────────────────────────────────────────────
 
-package_name="ffmpeg-macos-universal-${RELEASE_TAG}"
+package_name="ffmpeg-macos-universal-${RELEASE_TAG#ffmpeg-*-*-}"
 case "$PACKAGE_FORMAT" in
   tar.gz)
     tar -C "$universal_install" -czf "${package_root}/${package_name}.tar.gz" .

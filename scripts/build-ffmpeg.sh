@@ -184,7 +184,8 @@ compiler_version="$(${base_cc:-cc} --version 2>/dev/null | head -n 1 || true)"
 
 # ── Package ──────────────────────────────────────────────────────────────────
 
-package_name="ffmpeg-${TARGET_PLATFORM}-${TARGET_ARCH}-${RELEASE_TAG}"
+# RELEASE_TAG is "ffmpeg-<platform>-<arch>-<build id>"; keep only the build id to avoid repeating it.
+package_name="ffmpeg-${TARGET_PLATFORM}-${TARGET_ARCH}-${RELEASE_TAG#ffmpeg-*-*-}"
 case "$PACKAGE_FORMAT" in
   tar.gz)
     tar -C "$install_root" -czf "$package_root/${package_name}.tar.gz" .
