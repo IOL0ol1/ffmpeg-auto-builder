@@ -17,6 +17,8 @@ dep_build() {
     windows/x86)    target=x86-win32-gcc ;;
     windows/arm64)  target=arm64-win64-gcc ;;
   esac
+  # The ARM assembly goes through ${CROSS}as; CC alone does not set it.
+  [[ "$TARGET_PLATFORM/$TARGET_ARCH" != linux/armv7 ]] || export CROSS="${CC%gcc}"
   ./configure --prefix="$DEPS_PREFIX" --target="$target" \
     --enable-static --disable-shared --enable-pic --enable-vp9-highbitdepth \
     --disable-examples --disable-tools --disable-docs --disable-unit-tests
