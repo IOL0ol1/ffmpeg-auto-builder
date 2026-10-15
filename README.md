@@ -23,7 +23,7 @@
 ├── .github/
 │   ├── ISSUE_TEMPLATE/build.yml  # 编译请求的 Issue 表单
 │   └── workflows/build.yml       # 编译流水线（setup → build matrix → lipo → release）
-├── docs/                         # GitHub Pages 前端（index.html / app.js / styles.css）
+├── docs/                         # GitHub Pages 前端（index.html / app.js / configure.js / styles.css）
 └── scripts/
     ├── common.sh                 # 公共工具函数（仓库地址解析、参数过滤等）
     ├── parse-issue.py            # 从 Issue 正文解析编译参数
@@ -70,7 +70,7 @@
 | 目标平台 | `Linux` / `macOS` / `Windows` / `全部平台` | `Linux` |
 | 目标指令集 | 选项随平台变化，见下方对照表 | `x86_64` |
 | 打包格式 | `tar.gz` 或 `zip` | `zip` |
-| configure 编译参数 | 空格分隔，可先选“常用模板”再点“应用模板” | `--disable-debug --disable-doc --enable-gpl` |
+| 编译参数 | 选择预设方案、链接方式、许可证和附加选项，必要时补充自定义参数，下方实时显示最终 configure 参数（详见“configure 参数说明”） | 预设“通用”+ 静态 + GPL |
 
 点击 **在 GitHub 上提交编译**，页面会先在本地校验参数，然后在新标签页打开 GitHub 的新建 Issue 页面，所有参数都已填好。
 
@@ -89,7 +89,7 @@
   - **运行详情**链接，可在页面底部下载 Artifact（需登录 GitHub，默认保留 90 天）；
   - 每个平台任务的结果表。
 - 编译成功后 Issue 会自动关闭；失败时保持打开，方便排查。
-- **网页上的“编译记录”**：列出最近 20 个编译 Issue 及其运行状态，可展开 Job/Step 日志摘要。有任务进行中时每 2 分钟自动刷新一次。网页未登录访问 GitHub API，每小时限 60 次请求，超出后稍等再刷新即可。
+- **网页上的“编译记录”**：列出最近 20 个编译 Issue 及其运行状态，可展开 Job/Step 日志摘要。有任务进行中时每 10 分钟自动刷新一次，也可随时点击“刷新”。网页未登录访问 GitHub API，每小时限 60 次请求，超出后稍等再刷新即可。
 - 参数校验失败（例如平台写错、configure 参数含非法字符）时，工作流会在 Issue 中回复错误原因并关闭该 Issue，修正后重新提交一个新的即可。
 
 ### 第 6 步：使用编译产物
@@ -136,13 +136,33 @@ BUILDINFO.txt   源码仓库、ref、commit、编译器、configure 参数
 
 - 参数以空格或换行分隔，仅允许 `[-+./:=,@%A-Za-z0-9_]` 字符，含 `; & | $ > \`` 或空格的值会被拒绝（因此 `--extra-cflags="-O3 -march=native"` 这类带空格的参数无法使用）。
 - 工作流会在你的参数**之前**自动注入交叉编译参数和 `--cc=ccache ...`；如需覆盖，直接写同名参数即可（后出现者生效）。
-- 页面内置模板：
+### 网页上的参数组合方式
 
-| 模板 | 参数 |
+网页不再用“选模板 → 追加到文本框”，而是按 **预设方案 → 链接方式 → 许可证 → 附加选项 → 自定义参数** 的顺序组合，并实时显示“最终 configure 参数”：
+
+- 同一个参数只会出现一次，重复选择不会叠加；取消勾选即移除。
+- 同一开关前后冲突时，后面的覆盖前面的（如自定义参数里写 `--enable-shared` 会覆盖链接方式里的 `--disable-shared`）。
+- `--enable-decoder=` 这类组件参数可以多次出现，全部保留。
+- 鼠标悬停在选项上可查看它对应的参数；点击“恢复默认”可重置所有选择。
+- 使用 `--enable-lib*`（第三方库）或 `--enable-nonfree` 时会给出提示；含非法字符时禁止提交。
+
+预设方案（只使用 FFmpeg 自带功能，无需第三方库）：
+
+| 预设 | 参数 | 适用场景 |
+|---|---|---|
+| 通用（推荐） | `--disable-debug` | 日常转码、命令行使用 |
+| 体积优先 | `--disable-debug --enable-small --disable-network` | 随应用分发命令行工具 |
+| 仅开发库 | `--disable-debug --disable-programs` | 只要 libav* 库和头文件 |
+| 播放器解码精简 | `--disable-programs --disable-everything` + 主流解码器 / 解封装器 / 解析器 + `file` 协议 | 嵌入播放器，体积最小 |
+| 调试符号版 | `--enable-debug=3 --disable-stripping` | 用 gdb / lldb 排查问题 |
+
+其余分组：
+
+| 分组 | 选项 |
 |---|---|
-| 精简常用构建 | `--disable-debug --disable-doc --enable-gpl` |
-| 共享库 + GPL | `--disable-debug --disable-doc --enable-gpl --enable-version3 --enable-shared` |
-| 静态库优先 | `--disable-debug --disable-doc --enable-gpl --enable-version3 --enable-static --disable-shared` |
+| 链接方式 | 静态 `--enable-static --disable-shared`（默认）／共享 `--enable-shared --disable-static`／两者 |
+| 许可证 | LGPL（不加参数）／GPL v2+ `--enable-gpl`（默认）／GPL v3 `--enable-gpl --enable-version3` |
+| 附加选项 | `--disable-doc`（默认勾选）、`--enable-small`、`--disable-network`、`--disable-avdevice`、`--enable-pic`、`--disable-autodetect` |
 
 - 运行环境只安装了编译 FFmpeg 本体所需的工具链，**没有安装 x264、x265、libvpx 等第三方库**；`--enable-libx264` 这类参数会在 configure 阶段失败。需要时可在 Fork 中修改 `scripts/install-deps.sh` 与 `scripts/resolve-params.sh` 里的 MSYS2 包列表。
 

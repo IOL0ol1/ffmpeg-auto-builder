@@ -11,10 +11,6 @@
     <section class="hero card">
       <p class="eyebrow">GitHub Pages + GitHub Actions</p>
       <h1>FFmpeg 在线自动编译</h1>
-      <p class="lead">
-        纯 GitHub 生态、可 Fork 自用的 FFmpeg 在线编译页。填写参数后，页面会生成一个预填好的编译 Issue，
-        你在 GitHub 上确认提交即可触发编译，全程无需输入任何令牌。
-      </p>
       <dl class="repo-summary">
         <div>
           <dt>当前仓库</dt>
@@ -69,33 +65,51 @@
           </label>
         </div>
 
-        <div class="grid presets">
-          <label>
-            <span>常用模板</span>
-            <select id="preset">
-              <option value="">选择一个模板（可选）</option>
-              <option value="--disable-debug --disable-doc --enable-gpl">精简常用构建</option>
-              <option value="--disable-debug --disable-doc --enable-gpl --enable-version3 --enable-shared">共享库 + GPL</option>
-              <option value="--disable-debug --disable-doc --enable-gpl --enable-version3 --enable-static --disable-shared">静态库优先</option>
-            </select>
-          </label>
-          <button id="apply-preset" type="button" class="secondary">应用模板</button>
-        </div>
+        <fieldset class="config">
+          <legend>编译参数</legend>
 
-        <label>
-          <span>configure 编译参数</span>
-          <textarea id="configure-options" name="configureOptions" rows="7" placeholder="--disable-debug --disable-doc --enable-gpl" required></textarea>
-          <small>仅支持安全字符集，会拒绝 <code>;</code>、<code>&amp;</code>、<code>|</code>、<code>$</code>、<code>&gt;</code>、<code>`</code> 等危险字符。</small>
-        </label>
+          <label>
+            <span>预设方案</span>
+            <select id="preset"></select>
+            <small id="preset-description" class="muted"></small>
+          </label>
+
+          <div class="grid">
+            <div class="choice-group">
+              <span class="group-title">链接方式</span>
+              <div id="linkage-options" class="choices"></div>
+            </div>
+            <div class="choice-group">
+              <span class="group-title">许可证</span>
+              <div id="license-options" class="choices"></div>
+            </div>
+          </div>
+
+          <div class="choice-group">
+            <span class="group-title">附加选项</span>
+            <div id="extra-options" class="choices chips"></div>
+          </div>
+
+          <label>
+            <span>自定义参数（可选，追加在最后，可覆盖上面的选项）</span>
+            <textarea id="custom-options" rows="3" placeholder="例如 --disable-encoders --enable-encoder=aac"></textarea>
+            <small>空格或换行分隔，仅允许 <code>[-+./:=,@%A-Za-z0-9_]</code> 字符。</small>
+          </label>
+
+          <div class="preview">
+            <div class="preview-head">
+              <span class="group-title">最终 configure 参数</span>
+              <button id="reset-config" type="button" class="secondary small">恢复默认</button>
+            </div>
+            <code id="configure-preview"></code>
+            <ul id="config-warnings" class="warnings"></ul>
+          </div>
+        </fieldset>
 
         <div class="actions">
           <button type="submit">在 GitHub 上提交编译</button>
         </div>
         <p id="form-message" class="form-message"></p>
-        <small>
-          点击后会打开 GitHub 的新建 Issue 页面并自动填好参数，确认后点击 <strong>Submit new issue</strong> 即开始编译。
-          只有仓库所有者和协作者提交的 Issue 才会被执行；进度与下载链接会以评论形式回复在该 Issue 中。
-        </small>
       </form>
     </section>
 
@@ -104,7 +118,7 @@
         <h2>编译记录</h2>
         <button id="refresh-builds" type="button" class="secondary">刷新</button>
       </div>
-      <p class="lead muted">最近 20 个编译 Issue。进行中的任务每 2 分钟自动刷新一次（未登录的 GitHub API 每小时限 60 次请求）。</p>
+      <p class="lead muted">最近 20 个编译 Issue。有任务进行中时每 10 分钟自动刷新一次。</p>
       <div id="build-list" class="run-list empty">加载中…</div>
     </section>
   </main>

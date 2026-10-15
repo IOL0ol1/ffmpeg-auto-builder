@@ -1,5 +1,17 @@
+import {
+  DEFAULT_CONFIG, EXTRAS, LICENSES, LINKAGES, PRESETS, SAFE_TOKEN_PATTERN, buildConfigure,
+} from './configure.js';
+
 const form = document.querySelector('#build-form');
-const applyPresetButton = document.querySelector('#apply-preset');
+const presetSelect = document.querySelector('#preset');
+const presetDescriptionNode = document.querySelector('#preset-description');
+const linkageOptionsNode = document.querySelector('#linkage-options');
+const licenseOptionsNode = document.querySelector('#license-options');
+const extraOptionsNode = document.querySelector('#extra-options');
+const customOptionsInput = document.querySelector('#custom-options');
+const configurePreviewNode = document.querySelector('#configure-preview');
+const configWarningsNode = document.querySelector('#config-warnings');
+const resetConfigButton = document.querySelector('#reset-config');
 const refreshButton = document.querySelector('#refresh-builds');
 const detectedRepoNode = document.querySelector('#detected-repo');
 const issuesStatusNode = document.querySelector('#issues-status');
@@ -11,8 +23,7 @@ const targetArchSelect = document.querySelector('#target-arch');
 const BUILD_TITLE_PREFIX = '[build]';
 const ISSUE_TEMPLATE = 'build.yml';
 // Unauthenticated GitHub API calls are limited to 60/hour per IP; each refresh costs two.
-const AUTO_REFRESH_MS = 120000;
-const SAFE_TOKEN_PATTERN = /^[-+./:=,@%A-Za-z0-9_]+$/;
+const AUTO_REFRESH_MS = 10 * 60 * 1000;
 const SAFE_REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/;
 const REPOSITORY_PATTERN = /^(https?:\/\/github\.com\/|git@github\.com:)[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+?(\.git)?\/?$/;
 
@@ -128,14 +139,64 @@ function updateArchOptions() {
   });
 }
 
-function applyPreset() {
-  const preset = document.querySelector('#preset').value.trim();
-  if (!preset) {
-    return;
-  }
+// ── configure option builder ────────────────────────────────────────────────
 
-  const textarea = document.querySelector('#configure-options');
-  textarea.value = [textarea.value.trim(), preset].filter(Boolean).join('\n');
+function renderChoices(container, items, type, name) {
+  container.replaceChildren(...items.map((item) => {
+    const label = document.createElement('label');
+    label.className = 'choice';
+    const input = document.createElement('input');
+    input.type = type;
+    input.name = name;
+    input.value = item.id;
+    const text = document.createElement('span');
+    text.textContent = item.label;
+    label.title = item.flags.join(' ') || '（不添加参数）';
+    label.append(input, text);
+    return label;
+  }));
+}
+
+function renderConfigControls() {
+  presetSelect.replaceChildren(...PRESETS.map((preset) => {
+    const opt = document.createElement('option');
+    opt.value = preset.id;
+    opt.textContent = preset.label;
+    return opt;
+  }));
+  renderChoices(linkageOptionsNode, LINKAGES, 'radio', 'linkage');
+  renderChoices(licenseOptionsNode, LICENSES, 'radio', 'license');
+  renderChoices(extraOptionsNode, EXTRAS, 'checkbox', 'extra');
+}
+
+function applyConfig(config) {
+  presetSelect.value = config.preset;
+  form.querySelectorAll('input[name="linkage"]').forEach((input) => { input.checked = input.value === config.linkage; });
+  form.querySelectorAll('input[name="license"]').forEach((input) => { input.checked = input.value === config.license; });
+  form.querySelectorAll('input[name="extra"]').forEach((input) => { input.checked = config.extras.includes(input.value); });
+  customOptionsInput.value = config.custom;
+}
+
+function readConfig() {
+  return {
+    preset: presetSelect.value,
+    linkage: form.querySelector('input[name="linkage"]:checked')?.value || DEFAULT_CONFIG.linkage,
+    license: form.querySelector('input[name="license"]:checked')?.value || DEFAULT_CONFIG.license,
+    extras: [...form.querySelectorAll('input[name="extra"]:checked')].map((input) => input.value),
+    custom: customOptionsInput.value,
+  };
+}
+
+function updateConfigurePreview() {
+  const { options, warnings } = buildConfigure(readConfig());
+  presetDescriptionNode.textContent = PRESETS.find((preset) => preset.id === presetSelect.value)?.description || '';
+  configurePreviewNode.textContent = options;
+  configWarningsNode.replaceChildren(...warnings.map((warning) => {
+    const li = document.createElement('li');
+    li.className = warning.level === 'error' ? 'status-error' : 'status-warn';
+    li.textContent = warning.text;
+    return li;
+  }));
 }
 
 function readForm() {
@@ -147,7 +208,7 @@ function readForm() {
     targetPlatform: value('targetPlatform'),
     targetArch: value('targetArch'),
     packageFormat: value('packageFormat'),
-    configureOptions: value('configureOptions').split(/\s+/).filter(Boolean).join(' '),
+    configureOptions: buildConfigure(readConfig()).options,
   };
 }
 
@@ -159,12 +220,9 @@ function validate(params) {
   if (params.sourceRef && !SAFE_REF_PATTERN.test(params.sourceRef)) {
     return '源码分支 / tag / commit 含有不允许的字符。';
   }
-  if (!params.configureOptions) {
-    return '请填写 configure 参数。';
-  }
   const unsafe = params.configureOptions.split(' ').find((token) => !SAFE_TOKEN_PATTERN.test(token));
   if (unsafe) {
-    return `configure 参数含有不允许的字符：${unsafe}`;
+    return `自定义参数含有不允许的字符：${unsafe}`;
   }
   return '';
 }
@@ -400,7 +458,17 @@ buildListNode.dataset.baseClass = 'run-list';
 
 targetPlatformSelect.addEventListener('change', updateArchOptions);
 updateArchOptions();
-applyPresetButton.addEventListener('click', applyPreset);
+
+renderConfigControls();
+applyConfig(DEFAULT_CONFIG);
+updateConfigurePreview();
+form.querySelector('.config').addEventListener('input', updateConfigurePreview);
+form.querySelector('.config').addEventListener('change', updateConfigurePreview);
+resetConfigButton.addEventListener('click', () => {
+  applyConfig(DEFAULT_CONFIG);
+  updateConfigurePreview();
+});
+
 form.addEventListener('submit', handleSubmit);
 refreshButton.addEventListener('click', refreshBuilds);
 
