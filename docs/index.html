@@ -82,20 +82,15 @@
           </div>
 
           <details class="advanced">
-            <summary>高级：自定义参数 / 从命令行导入</summary>
+            <summary>高级：自定义参数</summary>
             <label>
               <span>自定义参数（追加在最后，可覆盖上面的选项）</span>
-              <textarea id="custom-options" rows="3" placeholder="例如 --disable-encoders --enable-encoder=aac"></textarea>
-              <small>空格或换行分隔，仅允许 <code>[-+./:=,@%A-Za-z0-9_]</code> 字符。</small>
+              <textarea id="custom-options" rows="3" placeholder="可直接粘贴已有的 configure 参数，例如 ./configure --enable-shared --disable-doc --extra-cflags=-O3"></textarea>
+              <small>
+                空格或换行分隔，仅允许 <code>[-+./:=,@%A-Za-z0-9_]</code> 字符。输入框失去焦点后，能对应到上方选项的参数会自动同步过去，其余保留在这里。
+              </small>
+              <small id="custom-sync-result" class="muted"></small>
             </label>
-            <label>
-              <span>从命令行导入</span>
-              <textarea id="import-input" rows="3" placeholder="粘贴已有的 configure 参数，例如 ./configure --enable-gpl --enable-shared --disable-doc"></textarea>
-            </label>
-            <div class="actions">
-              <button id="import-apply" type="button" class="secondary small">识别并应用</button>
-              <small id="import-result" class="muted"></small>
-            </div>
           </details>
 
           <div class="preview">

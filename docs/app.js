@@ -1,7 +1,7 @@
 import {
   COMPONENT_GROUPS, SEGMENTS, TOGGLE_GROUPS,
-  buildConfigure, defaultConfig, effectiveComponents, importConfigure, isComponentAvailable, normalizeConfig,
-  requiresGpl,
+  absorbCustom, buildConfigure, defaultConfig, effectiveComponents, isComponentAvailable, normalizeConfig,
+  requiresGpl, splitTokens,
 } from './configure.js';
 
 const form = document.querySelector('#build-form');
@@ -11,9 +11,7 @@ const componentModeNode = document.querySelector('#component-mode');
 const componentModeHintNode = document.querySelector('#component-mode-hint');
 const componentGroupsNode = document.querySelector('#component-groups');
 const customOptionsInput = document.querySelector('#custom-options');
-const importInput = document.querySelector('#import-input');
-const importApplyButton = document.querySelector('#import-apply');
-const importResultNode = document.querySelector('#import-result');
+const customSyncResultNode = document.querySelector('#custom-sync-result');
 const configurePreviewNode = document.querySelector('#configure-preview');
 const configWarningsNode = document.querySelector('#config-warnings');
 const copyConfigButton = document.querySelector('#copy-config');
@@ -349,19 +347,15 @@ function updateConfig(patch) {
   syncConfigUI();
 }
 
-function importFromCommandLine() {
-  const text = importInput.value.trim();
-  if (!text) {
-    importResultNode.textContent = '请先粘贴 configure 参数。';
-    return;
-  }
-  const config = importConfigure(text);
-  state.config = config;
-  saveConfig();
-  syncConfigUI();
-  importResultNode.textContent = config.custom
-    ? '已应用。无法对应到可视化选项的参数已放入“自定义参数”。'
-    : '已应用，全部参数都已对应到可视化选项。';
+// On blur, move whatever the visual controls can express out of the custom field.
+function syncCustomIntoControls() {
+  const before = splitTokens(state.config.custom).length;
+  const next = absorbCustom(state.config);
+  const after = splitTokens(next.custom).length;
+  customSyncResultNode.textContent = before && next !== state.config && after < before
+    ? `已将 ${before - after} 个参数同步到上方选项${after ? `，${after} 个保留在此处` : ''}。`
+    : '';
+  updateConfig(next);
 }
 
 async function copyConfigure() {
@@ -635,7 +629,7 @@ renderConfigControls();
 state.config = loadSavedConfig();
 syncConfigUI();
 customOptionsInput.addEventListener('input', () => updateConfig({ custom: customOptionsInput.value }));
-importApplyButton.addEventListener('click', importFromCommandLine);
+customOptionsInput.addEventListener('change', syncCustomIntoControls);
 copyConfigButton.addEventListener('click', copyConfigure);
 resetConfigButton.addEventListener('click', () => {
   state.config = defaultConfig();

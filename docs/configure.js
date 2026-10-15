@@ -56,32 +56,31 @@ export const SEGMENTS = [
   },
 ];
 
-// On/off switches. `on` / `off` are the flags emitted for each state;
-// `ffmpegDefault` is FFmpeg's own default, used when importing a command line.
+// On/off switches. `on` / `off` are the flags emitted for each state.
 export const TOGGLE_GROUPS = [
   {
     id: 'programs',
     label: '程序与库',
     items: [
-      { id: 'ffmpeg', label: 'ffmpeg', hint: '转码命令行程序', default: true, ffmpegDefault: true, off: ['--disable-ffmpeg'] },
-      { id: 'ffprobe', label: 'ffprobe', hint: '媒体信息分析程序', default: true, ffmpegDefault: true, off: ['--disable-ffprobe'] },
-      { id: 'avdevice', label: 'libavdevice', hint: '采集 / 播放设备（摄像头、屏幕等）', default: true, ffmpegDefault: true, off: ['--disable-avdevice'] },
-      { id: 'avfilter', label: 'libavfilter', hint: '音视频滤镜，ffmpeg 程序依赖它', default: true, ffmpegDefault: true, off: ['--disable-avfilter'] },
-      { id: 'swscale', label: 'libswscale', hint: '图像缩放与像素格式转换', default: true, ffmpegDefault: true, off: ['--disable-swscale'] },
-      { id: 'swresample', label: 'libswresample', hint: '音频重采样与格式转换', default: true, ffmpegDefault: true, off: ['--disable-swresample'] },
-      { id: 'doc', label: '文档 / man 页', hint: '生成 HTML 文档与 man 页，会增加编译时间', default: false, ffmpegDefault: true, off: ['--disable-doc'] },
+      { id: 'ffmpeg', label: 'ffmpeg', hint: '转码命令行程序', default: true, off: ['--disable-ffmpeg'] },
+      { id: 'ffprobe', label: 'ffprobe', hint: '媒体信息分析程序', default: true, off: ['--disable-ffprobe'] },
+      { id: 'avdevice', label: 'libavdevice', hint: '采集 / 播放设备（摄像头、屏幕等）', default: true, off: ['--disable-avdevice'] },
+      { id: 'avfilter', label: 'libavfilter', hint: '音视频滤镜，ffmpeg 程序依赖它', default: true, off: ['--disable-avfilter'] },
+      { id: 'swscale', label: 'libswscale', hint: '图像缩放与像素格式转换', default: true, off: ['--disable-swscale'] },
+      { id: 'swresample', label: 'libswresample', hint: '音频重采样与格式转换', default: true, off: ['--disable-swresample'] },
+      { id: 'doc', label: '文档 / man 页', hint: '生成 HTML 文档与 man 页，会增加编译时间', default: false, off: ['--disable-doc'] },
     ],
   },
   {
     id: 'features',
     label: '功能特性',
     items: [
-      { id: 'asm', label: '汇编优化', hint: 'SIMD 汇编加速；关闭后便于调试但明显变慢', default: true, ffmpegDefault: true, off: ['--disable-asm'] },
-      { id: 'hwaccel', label: '硬件加速', hint: '自动启用平台可用的硬件解码（VideoToolbox、D3D11VA、DXVA2 等）', default: true, ffmpegDefault: true, off: ['--disable-hwaccels'] },
-      { id: 'network', label: '网络协议', hint: 'http、rtmp、tcp、udp 等网络协议', default: true, ffmpegDefault: true, off: ['--disable-network'] },
-      { id: 'autodetect', label: '自动探测系统库', hint: '自动启用系统中可用的库；关闭后产物依赖更少、更可移植', default: true, ffmpegDefault: true, off: ['--disable-autodetect'] },
-      { id: 'small', label: '体积优化 (-Os)', hint: '以体积为目标优化，速度略慢', default: false, ffmpegDefault: false, on: ['--enable-small'] },
-      { id: 'pic', label: '位置无关代码 (PIC)', hint: '静态库需要链接进其它共享库时开启', default: false, ffmpegDefault: false, on: ['--enable-pic'] },
+      { id: 'asm', label: '汇编优化', hint: 'SIMD 汇编加速；关闭后便于调试但明显变慢', default: true, off: ['--disable-asm'] },
+      { id: 'hwaccel', label: '硬件加速', hint: '自动启用平台可用的硬件解码（VideoToolbox、D3D11VA、DXVA2 等）', default: true, off: ['--disable-hwaccels'] },
+      { id: 'network', label: '网络协议', hint: 'http、rtmp、tcp、udp 等网络协议', default: true, off: ['--disable-network'] },
+      { id: 'autodetect', label: '自动探测系统库', hint: '自动启用系统中可用的库；关闭后产物依赖更少、更可移植', default: true, off: ['--disable-autodetect'] },
+      { id: 'small', label: '体积优化 (-Os)', hint: '以体积为目标优化，速度略慢', default: false, on: ['--enable-small'] },
+      { id: 'pic', label: '位置无关代码 (PIC)', hint: '静态库需要链接进其它共享库时开启', default: false, on: ['--enable-pic'] },
     ],
   },
 ];
@@ -181,8 +180,9 @@ function tokenKey(token) {
   return valued ? `option:${valued[1]}` : token;
 }
 
+// A pasted "./configure ..." line is accepted; the command name itself is dropped.
 export function splitTokens(text) {
-  return String(text || '').split(/\s+/).filter(Boolean);
+  return String(text || '').split(/\s+/).filter((token) => token && token !== './configure' && token !== 'configure');
 }
 
 export function mergeTokens(tokens) {
@@ -271,83 +271,89 @@ function collectWarnings(config, tokens, custom) {
   return warnings;
 }
 
-// Map an existing configure command line onto the visual controls.
-// Tokens that no control represents are returned in `custom`.
-export function importConfigure(text) {
-  // --disable-programs is shorthand for disabling every program toggle.
-  const remaining = splitTokens(text)
-    .filter((token) => token !== './configure')
-    .flatMap((token) => (token === '--disable-programs' ? ['--disable-ffmpeg', '--disable-ffprobe'] : [token]));
-  const config = defaultConfig();
-  const has = (flag) => remaining.includes(flag);
-  const take = (...flags) => flags.forEach((flag) => {
-    const index = remaining.indexOf(flag);
-    if (index >= 0) remaining.splice(index, 1);
-  });
-
-  // Build type
-  const debugFlag = remaining.find((token) => /^--enable-debug(=.*)?$/.test(token));
-  if (debugFlag || has('--disable-optimizations')) {
-    config.buildType = 'debug';
-    take(debugFlag, '--disable-optimizations', '--disable-stripping');
-  } else if (has('--disable-debug')) {
-    config.buildType = 'release';
-    take('--disable-debug');
-  } else {
-    config.buildType = 'relwithdebinfo';
-    take('--disable-stripping');
-  }
-
-  // Linkage (FFmpeg defaults to static only)
-  const shared = has('--enable-shared');
-  const noStatic = has('--disable-static');
-  config.linkage = shared ? (noStatic ? 'shared' : 'both') : 'static';
-  take('--enable-shared', '--disable-shared', '--enable-static', '--disable-static');
-
-  // License
-  if (has('--enable-gpl')) {
-    config.license = has('--enable-version3') ? 'gpl3' : 'gpl';
-    take('--enable-gpl', '--enable-version3');
-  } else {
-    config.license = 'lgpl';
-  }
-
-  // Toggles: absent flags mean FFmpeg's default
-  TOGGLE_GROUPS.flatMap((group) => group.items).forEach((item) => {
-    const off = item.off || [];
-    const on = item.on || [];
-    if (off.length && off.every(has)) {
-      config.toggles[item.id] = false;
-    } else if (on.length && on.every(has)) {
-      config.toggles[item.id] = true;
-    } else {
-      config.toggles[item.id] = item.ffmpegDefault;
+// Expand component lists so "--enable-decoder=a,b" compares equal to two separate tokens.
+function semanticSet(tokens) {
+  return new Set(tokens.flatMap((token) => {
+    const match = token.match(/^--(enable|disable)-([a-z]+)=(.+)$/);
+    if (match && COMPONENT_KINDS.has(match[2])) {
+      return match[3].split(',').filter(Boolean).map((name) => `--${match[1]}-${match[2]}=${name}`);
     }
-    take(...off, ...on);
+    return [token];
+  }));
+}
+
+function sameSemantics(a, b) {
+  const left = semanticSet(a);
+  const right = semanticSet(b);
+  return left.size === right.size && [...left].every((token) => right.has(token));
+}
+
+function oppositeFlag(flag) {
+  return flag.startsWith('--enable-') ? flag.replace('--enable-', '--disable-') : flag.replace('--disable-', '--enable-');
+}
+
+// Flags that only restate FFmpeg's own default (e.g. --enable-doc, --disable-gpl);
+// a toggle in its default position expresses them, so they can be dropped from custom.
+const DEFAULT_RESTATEMENTS = new Set([
+  ...TOGGLE_GROUPS.flatMap((group) => group.items).flatMap((item) => [...(item.on || []), ...(item.off || [])].map(oppositeFlag)),
+  '--disable-gpl',
+  '--disable-version3',
+]);
+
+// Move custom tokens that a visual control can represent into that control.
+// The current selection is the baseline, and the result must produce exactly the same
+// effective flags as before; otherwise the config is returned unchanged.
+export function absorbCustom(config) {
+  if (!splitTokens(config.custom).length) return config;
+
+  const target = buildConfigure(config).tokens.filter((token) => !DEFAULT_RESTATEMENTS.has(token));
+  const inTarget = (flags) => flags.every((flag) => target.includes(flag));
+  const next = { ...config, toggles: { ...config.toggles }, components: { ...config.components }, custom: '' };
+
+  SEGMENTS.forEach((segment) => {
+    const candidates = segment.options.filter((option) => inTarget(option.flags));
+    const largest = Math.max(-1, ...candidates.map((option) => option.flags.length));
+    const best = candidates.filter((option) => option.flags.length === largest);
+    if (best.length && !best.some((option) => option.id === config[segment.id])) {
+      next[segment.id] = best[0].id;
+    }
   });
 
-  // Components
-  if (has('--disable-everything')) {
-    config.componentMode = 'slim';
-    take('--disable-everything');
+  TOGGLE_GROUPS.flatMap((group) => group.items).forEach((item) => {
+    if (item.off && inTarget(item.off)) next.toggles[item.id] = false;
+    else if (item.on && inTarget(item.on)) next.toggles[item.id] = true;
+    else if (item.off) next.toggles[item.id] = true;
+    else next.toggles[item.id] = false;
+  });
+
+  next.componentMode = target.includes('--disable-everything') ? 'slim' : 'all';
+  if (next.componentMode === 'slim') {
     COMPONENT_GROUPS.forEach((group) => {
-      config.components[group.id] = [];
-      const prefix = `--enable-${group.id}=`;
-      remaining.filter((token) => token.startsWith(prefix)).forEach((token) => {
-        const names = token.slice(prefix.length).split(',').filter(Boolean);
-        const known = names.filter((name) => group.items.includes(name));
-        const unknown = names.filter((name) => !group.items.includes(name));
-        config.components[group.id] = [...new Set([...config.components[group.id], ...known])];
-        const index = remaining.indexOf(token);
-        if (unknown.length) {
-          remaining.splice(index, 1, `${prefix}${unknown.join(',')}`);
-        } else {
-          remaining.splice(index, 1);
-        }
-      });
+      const names = target
+        .filter((token) => token.startsWith(`--enable-${group.id}=`))
+        .flatMap((token) => token.split('=')[1].split(','));
+      const unchanged = config.componentMode === 'slim' && sameSemantics(
+        names.map((name) => `--enable-${group.id}=${name}`),
+        effectiveComponents(config, group).map((name) => `--enable-${group.id}=${name}`),
+      );
+      // Keep the stored selection (including GPL-only items hidden under LGPL) when nothing changed.
+      if (!unchanged) {
+        next.components[group.id] = group.items.filter((name) => names.includes(name));
+      }
     });
   }
 
-  config.custom = remaining.join(' ');
-  return config;
+  const produced = semanticSet(buildConfigure(next).tokens);
+  next.custom = target
+    .flatMap((token) => {
+      const match = token.match(/^--(enable|disable)-([a-z]+)=(.+)$/);
+      if (match && COMPONENT_KINDS.has(match[2])) {
+        const rest = match[3].split(',').filter((name) => !produced.has(`--${match[1]}-${match[2]}=${name}`));
+        return rest.length ? [`--${match[1]}-${match[2]}=${rest.join(',')}`] : [];
+      }
+      return produced.has(token) ? [] : [token];
+    })
+    .join(' ');
+
+  return sameSemantics(buildConfigure(next).tokens, target) ? next : config;
 }
