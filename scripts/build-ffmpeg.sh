@@ -27,9 +27,10 @@ if [[ -n "${DEPS_PREFIX:-}" ]]; then
   source "$script_dir/toolchain.sh"
   setup_toolchain
   injected_args+=("${FFMPEG_TOOLCHAIN_ARGS[@]}")
-  # Static C++ libraries (x265, zimg, HarfBuzz, ...) need the C++ runtime at link time.
+  # Static C++ libraries (x265, zimg, HarfBuzz, ...) need the C++ runtime at link time, and
+  # libraries without pkg-config files (soxr) need libm on Linux.
   case "$TARGET_PLATFORM" in
-    linux) injected_args+=("--extra-libs=-lstdc++") ;;
+    linux) injected_args+=("--extra-libs=-lstdc++" "--extra-libs=-lm") ;;
     *)     injected_args+=("--extra-libs=-lc++") ;;
   esac
 fi

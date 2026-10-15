@@ -17,4 +17,8 @@ dep_build() {
   [[ "$TARGET_PLATFORM" == "windows" && "$TARGET_ARCH" != "x86_64" ]] && asm=OFF
   cmake_build -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
     -DENABLE_SHARED=OFF -DENABLE_CLI=OFF -DENABLE_ASSEMBLY="$asm"
+  # x265 prefixes every implicit compiler library with -l; llvm-mingw reports
+  # "-l:libunwind.a", which turns into the invalid "-l-l:libunwind.a".
+  sed -i.bak 's/-l-l:/-l:/g' "$DEPS_PREFIX/lib/pkgconfig/x265.pc"
+  rm -f "$DEPS_PREFIX/lib/pkgconfig/x265.pc.bak"
 }
