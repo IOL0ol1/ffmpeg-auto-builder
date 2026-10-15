@@ -39,6 +39,10 @@ export const SEGMENTS = [
 
 // On/off switches. `on` / `off` are the flags emitted for each state;
 // `requires` lists toggles that must stay enabled while this one is enabled.
+// SVT-AV1 is 64-bit only; "all" builds every architecture of the platform, so it must be
+// available on each of them.
+const SVTAV1_EXCLUDED = ['windows/x86', 'linux/x86', 'linux/armv7', 'windows/all', 'linux/all'];
+
 export const TOGGLE_GROUPS = [
   {
     id: 'programs',
@@ -64,38 +68,30 @@ export const TOGGLE_GROUPS = [
     ],
   },
   {
-    // Built from source by deps/*.sh and linked statically (see scripts/build-deps.sh).
+    // Built from source by deps/*.sh for every target and linked statically
+    // (see scripts/build-deps.sh).
     id: 'libraries',
     items: [
-      { id: 'x264', default: true, on: ['--enable-libx264'], requiresDeps: true, gpl: true },
-      { id: 'x265', default: true, on: ['--enable-libx265'], requiresDeps: true, gpl: true },
-      { id: 'libvpx', default: true, on: ['--enable-libvpx'], requiresDeps: true },
-      { id: 'dav1d', default: true, on: ['--enable-libdav1d'], requiresDeps: true },
-      { id: 'svtav1', default: true, on: ['--enable-libsvtav1'], requiresDeps: true, excludedTargets: ['windows/x86'] },
-      { id: 'aom', default: true, on: ['--enable-libaom'], requiresDeps: true },
-      { id: 'opus', default: true, on: ['--enable-libopus'], requiresDeps: true },
-      { id: 'mp3lame', default: true, on: ['--enable-libmp3lame'], requiresDeps: true },
-      { id: 'vorbis', default: true, on: ['--enable-libvorbis'], requiresDeps: true },
-      { id: 'webp', default: true, on: ['--enable-libwebp'], requiresDeps: true },
-      { id: 'zimg', default: true, on: ['--enable-libzimg'], requiresDeps: true },
-      { id: 'soxr', default: true, on: ['--enable-libsoxr'], requiresDeps: true },
+      { id: 'x264', default: true, on: ['--enable-libx264'], gpl: true },
+      { id: 'x265', default: true, on: ['--enable-libx265'], gpl: true },
+      { id: 'libvpx', default: true, on: ['--enable-libvpx'] },
+      { id: 'dav1d', default: true, on: ['--enable-libdav1d'] },
+      { id: 'svtav1', default: true, on: ['--enable-libsvtav1'], excludedTargets: SVTAV1_EXCLUDED },
+      { id: 'aom', default: true, on: ['--enable-libaom'] },
+      { id: 'opus', default: true, on: ['--enable-libopus'] },
+      { id: 'mp3lame', default: true, on: ['--enable-libmp3lame'] },
+      { id: 'vorbis', default: true, on: ['--enable-libvorbis'] },
+      { id: 'webp', default: true, on: ['--enable-libwebp'] },
+      { id: 'zimg', default: true, on: ['--enable-libzimg'] },
+      { id: 'soxr', default: true, on: ['--enable-libsoxr'] },
       {
         id: 'libass',
         default: true,
         on: ['--enable-libass', '--enable-libfreetype', '--enable-libharfbuzz', '--enable-libfribidi'],
-        requiresDeps: true,
       },
     ],
   },
 ];
-
-// Targets whose builds include the third-party libraries (mirrors scripts/toolchain.sh).
-const DEPS_TARGETS = new Set([
-  'linux/x86_64', 'linux/arm64', 'linux/universal',
-  'macos/x86_64', 'macos/arm64', 'macos/universal',
-  'windows/x86_64', 'windows/x86', 'windows/arm64', 'windows/universal',
-  'all/x86_64', 'all/arm64', 'all/universal',
-]);
 
 const TOGGLES = TOGGLE_GROUPS.flatMap((group) => group.items);
 const toggleById = (id) => TOGGLES.find((item) => item.id === id);
@@ -225,7 +221,6 @@ export function effectiveSegmentValue(config, context, segmentId) {
   return segment.options.find((option) => segmentOptionStatus(context, segmentId, option.id).available)?.id ?? config[segmentId];
 }
 
-// The platform "all" allows everything.
 // `reason` is a code translated by the page as reason.<code>.
 export function componentStatus(config, context, groupId, name) {
   const group = componentGroup(groupId);
@@ -239,7 +234,7 @@ export function componentStatus(config, context, groupId, name) {
   if (rule?.needs && !config.toggles[rule.needs]) {
     return { available: false, reason: 'needs', needs: rule.needs };
   }
-  if (rule?.platforms && context.platform && context.platform !== 'all' && !rule.platforms.includes(context.platform)) {
+  if (rule?.platforms && context.platform && !rule.platforms.includes(context.platform)) {
     return { available: false, reason: rule.reason };
   }
   return { available: true };
@@ -261,7 +256,6 @@ export function effectiveComponents(config, context, groupId) {
 export function toggleStatus(config, context, id) {
   const item = toggleById(id);
   const target = `${context.platform}/${context.arch}`;
-  if (item.requiresDeps && context.platform && !DEPS_TARGETS.has(target)) return { available: false, reason: 'noDeps' };
   if (item.excludedTargets?.includes(target)) return { available: false, reason: 'target' };
   if (item.gpl && config.license !== 'gpl') return { available: false, reason: 'gpl' };
   return { available: true };

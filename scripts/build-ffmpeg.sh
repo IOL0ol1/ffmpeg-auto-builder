@@ -40,29 +40,13 @@ if [[ -n "${DEPS_PREFIX:-}" ]]; then
   fi
 fi
 
-# Cross-compilation flags for Linux when a cross-prefix is provided.
-if [[ "$TARGET_PLATFORM" == "linux" && -n "${CROSS_PREFIX:-}" ]]; then
-  case "$TARGET_ARCH" in
-    x86)   ffmpeg_arch="x86" ;;
-    armv7) ffmpeg_arch="arm" ;;
-    arm64) ffmpeg_arch="aarch64" ;;
-    *)     ffmpeg_arch="$TARGET_ARCH" ;;
-  esac
-  injected_args+=(
-    "--arch=${ffmpeg_arch}"
-    "--target-os=linux"
-    "--enable-cross-compile"
-    "--cross-prefix=${CROSS_PREFIX}"
-  )
-fi
-
 # Route compilation through ccache when available.
 if [[ -n "${DEPS_PREFIX:-}" ]]; then
   base_cc="$CC"
 elif [[ "$TARGET_PLATFORM" == "macos" ]]; then
   base_cc="clang"
 else
-  base_cc="${CROSS_PREFIX:-}gcc"
+  base_cc="gcc"
 fi
 if command -v ccache >/dev/null 2>&1; then
   injected_args+=("--cc=ccache ${base_cc}")
@@ -180,11 +164,15 @@ case "$TARGET_PLATFORM" in
   windows) bundle_windows_runtime ;;
 esac
 
-# ── Smoke test (native builds only; Windows is cross-compiled) ───────────────
+# ── Smoke test (wherever the build host can run the result) ─────────────────
 
+# TARGET_RUNNER comes from toolchain.sh: empty for native, "qemu-arm ..." for armv7 and
+# "none" for Windows, which is cross-compiled and cannot run on Linux.
 ffmpeg_bin="$install_root/bin/ffmpeg"
-if [[ -z "${CROSS_PREFIX:-}" && "$TARGET_PLATFORM" != "windows" && -x "$ffmpeg_bin" ]]; then
-  version_output="$("$ffmpeg_bin" -hide_banner -version)" || fail "Smoke test failed: $ffmpeg_bin -version"
+if [[ "${TARGET_RUNNER:-}" != "none" && -x "$ffmpeg_bin" ]]; then
+  read -r -a runner <<<"${TARGET_RUNNER:-}"
+  version_output="$(${runner[@]+"${runner[@]}"} "$ffmpeg_bin" -hide_banner -version)" \
+    || fail "Smoke test failed: $ffmpeg_bin -version"
   printf 'Smoke test OK: %s\n' "${version_output%%$'\n'*}"
 fi
 
@@ -206,8 +194,8 @@ compiler_version="$(${base_cc:-cc} --version 2>/dev/null | head -n 1 || true)"
 
 # ── Package ──────────────────────────────────────────────────────────────────
 
-# RELEASE_TAG is "ffmpeg-<platform>-<arch>-<build id>"; keep only the build id to avoid repeating it.
-package_name="ffmpeg-${TARGET_PLATFORM}-${TARGET_ARCH}-${RELEASE_TAG#ffmpeg-*-*-}"
+# ffmpeg-<platform>-<arch>-<license>-<build id>; RELEASE_TAG is "ffmpeg-<platform>-<arch>-<build id>".
+package_name="ffmpeg-${TARGET_PLATFORM}-${TARGET_ARCH}-$(license_id "${SANITIZED_CONFIGURE_ARGS[@]}")-${RELEASE_TAG#ffmpeg-*-*-}"
 case "$PACKAGE_FORMAT" in
   tar.gz)
     tar -C "$install_root" -czf "$package_root/${package_name}.tar.gz" .

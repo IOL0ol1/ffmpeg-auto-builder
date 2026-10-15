@@ -6,16 +6,16 @@ A template repository for building FFmpeg online with **GitHub Pages + GitHub Is
 
 ## Features
 
-- Fill in the source repository, branch/tag/commit, target platform, architecture, package format and configure options on the web page, and it generates a prefilled build issue.
+- Fill in the source repository, branch/tag/commit, package format, target platform, architecture and configure options on the web page, and it generates a prefilled build issue.
 - Submitting the issue on GitHub starts the build. Your GitHub sign-in is the only credential; the page never touches a token.
 - Only build issues opened by the repository owner or collaborators are run, so other people's issues cannot spend your Actions minutes.
 - The workflow comments on the issue when the build starts, fails or finishes, with links to the draft release and artifacts; GitHub notifies you according to your notification settings.
 - Builds public FFmpeg repositories, and private FFmpeg forks once a `SOURCE_PAT` secret is configured.
-- Linux / macOS / Windows builds run in parallel; macOS can produce an x86_64 + arm64 universal binary.
+- Linux / macOS / Windows with x86_64, x86, arm64 and armv7; macOS can produce an x86_64 + arm64 universal binary.
 - Like the official prebuilt FFmpeg binaries, common **third-party libraries are built from source and linked statically** (x264, x265, libvpx, dav1d, SVT-AV1, libaom, Opus, LAME, Vorbis, WebP, zimg, SoX resampler, libass); each one can be toggled on the page.
-- Linux x86_64 / arm64 builds run on glibc 2.28+ (RHEL 8, Debian 10, Ubuntu 20.04 and newer); Windows x86_64 / x86 / arm64 is cross-compiled with llvm-mingw into self-contained executables; macOS supports 11.0+. Linux x86 / armv7 are built without third-party libraries.
+- Linux x86_64 / arm64 builds run on glibc 2.28+ (RHEL 8, Debian 10, Ubuntu 20.04 and newer); Windows x86_64 / x86 / arm64 is cross-compiled with llvm-mingw into self-contained executables; macOS supports 11.0+; Linux x86 / armv7 run on glibc 2.31+ (Debian 11, Ubuntu 20.04 and newer).
 - ccache for incremental builds, a smoke test, and a single draft release per build (with `SHA256SUMS.txt`).
-- Packages as `tar.gz`, `zip` or a **NuGet package** for C++ and C# projects; with all platforms selected, one NuGet package contains every platform.
+- Packages as `tar.gz`, `zip` or a **NuGet package** for C++ and C# projects; with the `all` architecture, one NuGet package contains every architecture of the platform.
 - Packages work right after extraction: shared builds get fixed rpaths / install names, `.pc` files use relative paths, Windows executables need no extra DLLs, and every package contains `BUILDINFO.txt`.
 - The page lists recent builds, their status and a job/step log summary.
 - The page can be switched between **English / 简体中文 / 日本語** (defaults to the browser language); the generated issue and the workflow's replies use the same language.
@@ -79,9 +79,9 @@ Open the Pages URL from step 1. The top shows the detected repository and whethe
 |---|---|---|
 | FFmpeg Git repository | A GitHub repository, HTTPS or SSH form | `https://github.com/FFmpeg/FFmpeg` |
 | Branch / tag / commit | Optional; commits need the full 40-character SHA | `n7.1`, `release/7.1` |
-| Target platform | `Linux` / `macOS` / `Windows` / `All platforms` | `Linux` |
-| Target architecture | Depends on the platform; see the table below | `x86_64` |
 | Package format | `tar.gz`, `zip` or `NuGet (.nupkg)` (see "NuGet package") | `zip` |
+| Target platform | `Linux` / `macOS` / `Windows` | `Linux` |
+| Target architecture | Depends on the platform and package format; see the table below | `x86_64` |
 | Build options | Visual controls for build type, linking, license, programs & libraries, features and components, plus optional custom flags; the final configure flags are shown live (see "configure options") | Release + static + GPL |
 
 Click **Submit on GitHub**. The page checks the inputs, then opens GitHub's new-issue page in a new tab with everything filled in.
@@ -106,7 +106,7 @@ Click **Submit on GitHub**. The page checks the inputs, then opens GitHub's new-
 
 ### Step 6: Use the package
 
-Layout after extraction:
+Archives are named `ffmpeg-<platform>-<arch>-<license>-<build id>.zip` (or `.tar.gz`), where the license is `gpl`, `lgpl`, `gplv3`, `lgplv3` or `nonfree` as given by the configure flags, e.g. `ffmpeg-linux-x86_64-gpl-20261016t080000-i42.tar.gz`. Layout after extraction:
 
 ```text
 bin/            ffmpeg, ffprobe (and DLLs on Windows)
@@ -131,8 +131,8 @@ Open **Actions → build-ffmpeg → Run workflow** and fill in the same paramete
 |----------|--------------|------------------------------|----------------------------------------------|
 | linux    | x86_64       | ubuntu-latest, manylinux_2_28 container | Native build, glibc 2.28+, third-party libraries |
 | linux    | arm64        | ubuntu-24.04-arm, manylinux_2_28 container | Native build, glibc 2.28+, third-party libraries |
-| linux    | x86          | ubuntu-latest                | `i686-linux-gnu` cross-compile, FFmpeg only  |
-| linux    | armv7        | ubuntu-latest                | `arm-linux-gnueabihf` cross-compile, FFmpeg only |
+| linux    | x86          | ubuntu-latest, Ubuntu 20.04 container | `i686-linux-gnu` cross-compile (SSE2), glibc 2.31+, third-party libraries |
+| linux    | armv7        | ubuntu-latest, Ubuntu 20.04 container | `arm-linux-gnueabihf` cross-compile (hard float), glibc 2.31+, third-party libraries |
 | macos    | x86_64       | macos-15-intel               | Native build (minimum macOS 11), third-party libraries |
 | macos    | arm64        | macos-15                     | Native build (minimum macOS 11), third-party libraries |
 | macos    | universal    | macos-15-intel + macos-15    | Built separately, merged with lipo (including static libraries) |
@@ -140,15 +140,15 @@ Open **Actions → build-ffmpeg → Run workflow** and fill in the same paramete
 | windows  | x86          | ubuntu-latest                | llvm-mingw cross-compile (SSE2), third-party libraries |
 | windows  | arm64        | ubuntu-latest                | llvm-mingw cross-compile, third-party libraries |
 
-> - "All platforms" builds Linux, macOS and Windows in parallel; combinations that do not apply (such as macOS + x86) are skipped.
-> - `universal` builds x86_64 on Linux and Windows.
-> - If some platforms fail, the successful packages are still published to the draft release.
+> - `universal` (macOS, `tar.gz` / `zip`) merges x86_64 and arm64 into fat binaries.
+> - `all` (NuGet only) builds every architecture of the platform in parallel and packs them into one NuGet package: Linux x86_64 / x86 / arm64 / armv7, macOS x86_64 / arm64, Windows x86_64 / x86 / arm64.
+> - If some architectures fail, the successful packages are still published to the draft release.
 
 ## NuGet package
 
-With **Package format = NuGet**, the release contains one `.nupkg` instead of per-platform archives. With **All platforms** selected, every platform goes into the same package. NuGet packages always use **shared linking** (the page locks the linking option, and the workflow appends `--enable-shared --disable-static`).
+With **Package format = NuGet**, the release contains one `.nupkg` instead of archives. With architecture **all**, every architecture of the platform goes into the same package. NuGet packages always use **shared linking** (the page locks the linking option, and the workflow appends `--enable-shared --disable-static`).
 
-- **Package ID**: `<repository owner>.FFmpeg` (e.g. `IOL0ol1.FFmpeg`); **version**: the FFmpeg version from the source's `RELEASE` file plus the workflow run number, e.g. `8.0.0.57`.
+- **Package ID**: `<repository owner>.FFmpeg.<license>.<platform>`. The license is `GPL`, `LGPL`, `GPLv3`, `LGPLv3` or `NonFree`; the platform is the RID for a single architecture (`win-x64`, `linux-arm`, …) and `win` / `linux` / `osx` for architecture `all`. For example `IOL0ol1.FFmpeg.LGPL.win-x64` or `IOL0ol1.FFmpeg.GPL.linux`. **Version**: the FFmpeg version from the source's `RELEASE` file plus the workflow run number, e.g. `8.0.0.57`.
 - **License expression** follows the configure flags (`LGPL-2.1-or-later`, `GPL-2.0-or-later`, or the `-3.0` variants with `--enable-version3`).
 
 ```text
@@ -160,7 +160,7 @@ lib/netstandard2.0/_._         marks the package as compatible with .NET project
 README.md                      package readme
 ```
 
-RIDs: `linux-x64`, `linux-x86`, `linux-arm64`, `linux-arm`, `osx-x64`, `osx-arm64`, `win-x64`, `win-x86`, `win-arm64` (macOS universal contributes `osx-x64` and `osx-arm64`).
+RIDs: `linux-x64`, `linux-x86`, `linux-arm64`, `linux-arm`, `osx-x64`, `osx-arm64`, `win-x64`, `win-x86`, `win-arm64` (macOS `all` contributes `osx-x64` and `osx-arm64`).
 
 **C# / .NET**: add the package to an SDK-style project; `runtimes/<rid>/native/` is copied to the output automatically. Call FFmpeg with P/Invoke (or FFmpeg.AutoGen) using the versioned library names — `avutil-61.dll` on Windows, `libavutil.so.61` on Linux, `libavutil.61.dylib` on macOS:
 
@@ -225,7 +225,7 @@ The page turns common configure switches into visual controls and builds the fla
   - **License**: GPL-only components (such as the `hqdn3d`, `delogo`, `eq`, `cropdetect` and `mpdecimate` filters) carry a **GPL** badge and are greyed out under LGPL.
   - **Library dependencies**: with libswscale / libswresample disabled, the `scale` / `aresample` filters are greyed out in slim mode.
   - **Target platform**: the `https` protocol is unavailable for Linux targets (the Linux build environment has no TLS library).
-  - **Third-party libraries**: x264 / x265 (GPL) are unavailable under LGPL, SVT-AV1 is unavailable on Windows x86 (64-bit only), and the whole group is unavailable for Linux x86 / armv7, which are built without libraries.
+  - **Third-party libraries**: x264 / x265 (GPL) are unavailable under LGPL, SVT-AV1 is 64-bit only, so it is unavailable for Linux / Windows x86, Linux armv7 and `all` on Linux / Windows.
   - **Slim mode**: the `file` protocol is always kept so local files can be read and written.
   - Hover over a greyed-out option to see why; when the restriction is lifted (e.g. switching back to GPL), the earlier selection comes back.
 - **Why there is no GPL v3**: no built-in FFmpeg component requires version3; it only affects third-party libraries such as opencore-amr and mbedtls. The build environment has none of them, so only LGPL / GPL are offered; add `--enable-version3` as a custom flag if needed.
@@ -242,10 +242,10 @@ The page turns common configure switches into visual controls and builds the fla
    - on invalid parameters, replies with the reason and closes the issue; otherwise adds the `build` label and replies "Build started".
 3. **build** (parallel matrix):
    - checks out the source with `actions/checkout` (private repositories use the `SOURCE_PAT` secret, with `persist-credentials: false`);
-   - installs the build tools (Linux x86_64 / arm64 run in a manylinux_2_28 container; Windows uses llvm-mingw on Ubuntu);
+   - installs the build tools (Linux x86_64 / arm64 run in a manylinux_2_28 container, Linux x86 / armv7 in an Ubuntu 20.04 container; Windows uses llvm-mingw on Ubuntu);
    - restores the third-party library prefix from the Actions cache and builds whatever is missing with `scripts/build-deps.sh`;
    - restores the ccache cache;
-   - `scripts/build-ffmpeg.sh`: configure → make → make install → fix rpath / install names / `.pc` paths → bundle Windows runtime DLLs → `ffmpeg -version` smoke test (skipped when cross-compiling) → write `BUILDINFO.txt` → package;
+   - `scripts/build-ffmpeg.sh`: configure → make → make install → fix rpath / install names / `.pc` paths → bundle Windows runtime DLLs → `ffmpeg -version` smoke test (armv7 through qemu-user; skipped for Windows) → write `BUILDINFO.txt` → package;
    - uploads the artifact.
 4. **lipo** (macOS universal only): merges executables, shared libraries and static libraries of both architectures.
 5. **release**: collects every successful package (for NuGet, `scripts/pack-nuget.py` first combines the platform archives into one `.nupkg`), generates `SHA256SUMS.txt`, creates one draft release, then replies on the issue and closes it on success.
@@ -260,7 +260,7 @@ The page turns common configure switches into visual controls and builds the fla
 
 ## Known limitations
 
-- **Linux x86 / armv7** are cross-compiled on Ubuntu without third-party libraries, need a recent glibc and skip the smoke test.
+- **Linux x86 / armv7** need glibc 2.31+ (newer than the 2.28 of the 64-bit builds). armv7 targets the armhf baseline (VFPv3-D16) and does not assume NEON, so libaom and zimg are built without SIMD there; FFmpeg's own NEON code is still selected at run time.
 - **Windows** builds are cross-compiled, so the smoke test does not run for them.
 - **x265** is built 8-bit only (no 10/12-bit multilib yet).
 - **TLS**: Linux builds have no TLS library, so `https` is not available there; Windows uses Schannel and macOS uses the system TLS.

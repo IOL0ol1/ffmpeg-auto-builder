@@ -22,10 +22,18 @@ body:
       description: Optional (empty = default branch HEAD); commits need the full 40-character SHA.
       placeholder: n7.1
   - type: input
+    id: package_format
+    attributes:
+      label: Package format
+      description: "One of: tar.gz / zip / nuget"
+      value: tar.gz
+    validations:
+      required: true
+  - type: input
     id: target_platform
     attributes:
       label: Target platform
-      description: "One of: linux / macos / windows / all"
+      description: "One of: linux / macos / windows"
       value: linux
     validations:
       required: true
@@ -33,16 +41,8 @@ body:
     id: target_arch
     attributes:
       label: Target architecture
-      description: "One of: x86_64 / x86 / arm64 / armv7 / universal"
+      description: "One of: x86_64 / x86 / arm64 / armv7 / universal / all (all: NuGet only)"
       value: x86_64
-    validations:
-      required: true
-  - type: input
-    id: package_format
-    attributes:
-      label: Package format
-      description: "One of: tar.gz / zip / nuget"
-      value: tar.gz
     validations:
       required: true
   - type: textarea

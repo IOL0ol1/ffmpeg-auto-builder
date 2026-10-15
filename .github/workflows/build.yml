@@ -16,26 +16,6 @@ on:
         required: false
         type: string
         default: ''
-      target_platform:
-        description: Target platform (choose "all" to build all three in parallel)
-        required: true
-        type: choice
-        options:
-          - linux
-          - macos
-          - windows
-          - all
-      target_arch:
-        description: Target instruction set (universal = macOS fat binary; other platforms fall back to x86_64)
-        required: true
-        type: choice
-        options:
-          - x86_64
-          - x86
-          - arm64
-          - armv7
-          - universal
-        default: x86_64
       package_format:
         description: Output package format
         required: true
@@ -44,6 +24,26 @@ on:
           - tar.gz
           - zip
           - nuget
+      target_platform:
+        description: Target platform
+        required: true
+        type: choice
+        options:
+          - linux
+          - macos
+          - windows
+      target_arch:
+        description: Target architecture (universal = macOS fat binary; all = every architecture of the platform, NuGet only)
+        required: true
+        type: choice
+        options:
+          - x86_64
+          - x86
+          - arm64
+          - armv7
+          - universal
+          - all
+        default: x86_64
       configure_options:
         description: FFmpeg configure options
         required: true
@@ -152,7 +152,6 @@ jobs:
       SOURCE_REF: ${{ needs.setup.outputs.source_ref }}
       TARGET_PLATFORM: ${{ matrix.platform }}
       TARGET_ARCH: ${{ matrix.arch }}
-      CROSS_PREFIX: ${{ matrix.cross_prefix }}
       PACKAGE_FORMAT: ${{ needs.setup.outputs.archive_format }}
       CONFIGURE_OPTIONS: ${{ needs.setup.outputs.configure_options }}
       RELEASE_TAG: ${{ needs.setup.outputs.release_tag }}
@@ -244,6 +243,7 @@ jobs:
     env:
       PACKAGE_FORMAT: ${{ needs.setup.outputs.archive_format }}
       RELEASE_TAG: ${{ needs.setup.outputs.release_tag }}
+      CONFIGURE_OPTIONS: ${{ needs.setup.outputs.configure_options }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4

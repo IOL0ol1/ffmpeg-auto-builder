@@ -66,7 +66,8 @@ done < <(find "$arm64_install" -type f)
 
 # ── Package ───────────────────────────────────────────────────────────────────
 
-package_name="ffmpeg-macos-universal-${RELEASE_TAG#ffmpeg-*-*-}"
+sanitize_configure_options "${CONFIGURE_OPTIONS:-}"
+package_name="ffmpeg-macos-universal-$(license_id "${SANITIZED_CONFIGURE_ARGS[@]}")-${RELEASE_TAG#ffmpeg-*-*-}"
 case "$PACKAGE_FORMAT" in
   tar.gz)
     tar -C "$universal_install" -czf "${package_root}/${package_name}.tar.gz" .

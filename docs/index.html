@@ -47,12 +47,20 @@
 
         <div class="grid">
           <label>
+            <span data-i18n="form.package">Package format</span>
+            <select id="package-format" name="packageFormat">
+              <option value="tar.gz">tar.gz</option>
+              <option value="zip">zip</option>
+              <option value="nuget">NuGet (.nupkg)</option>
+            </select>
+          </label>
+
+          <label>
             <span data-i18n="form.platform">Target platform</span>
             <select id="target-platform" name="targetPlatform">
               <option value="linux">Linux</option>
               <option value="macos">macOS</option>
               <option value="windows">Windows</option>
-              <option value="all" data-i18n="form.platform.all">All platforms (parallel)</option>
             </select>
           </label>
 
@@ -60,15 +68,6 @@
             <span data-i18n="form.arch">Target architecture</span>
             <select id="target-arch" name="targetArch">
               <!-- populated dynamically based on selected platform -->
-            </select>
-          </label>
-
-          <label>
-            <span data-i18n="form.package">Package format</span>
-            <select id="package-format" name="packageFormat">
-              <option value="tar.gz">tar.gz</option>
-              <option value="zip">zip</option>
-              <option value="nuget">NuGet (.nupkg)</option>
             </select>
           </label>
         </div>

@@ -22,10 +22,18 @@ body:
       description: 任意（空欄ならデフォルトブランチの HEAD）。コミットは 40 桁の SHA をすべて入力してください。
       placeholder: n7.1
   - type: input
+    id: package_format
+    attributes:
+      label: パッケージ形式
+      description: "tar.gz / zip / nuget のいずれか"
+      value: tar.gz
+    validations:
+      required: true
+  - type: input
     id: target_platform
     attributes:
       label: ターゲットプラットフォーム
-      description: "linux / macos / windows / all のいずれか"
+      description: "linux / macos / windows のいずれか"
       value: linux
     validations:
       required: true
@@ -33,16 +41,8 @@ body:
     id: target_arch
     attributes:
       label: ターゲットアーキテクチャ
-      description: "x86_64 / x86 / arm64 / armv7 / universal のいずれか"
+      description: "x86_64 / x86 / arm64 / armv7 / universal / all のいずれか（all は NuGet のみ）"
       value: x86_64
-    validations:
-      required: true
-  - type: input
-    id: package_format
-    attributes:
-      label: パッケージ形式
-      description: "tar.gz / zip / nuget のいずれか"
-      value: tar.gz
     validations:
       required: true
   - type: textarea

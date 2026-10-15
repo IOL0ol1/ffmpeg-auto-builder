@@ -22,10 +22,18 @@ body:
       description: 可留空（使用默认分支 HEAD）；commit 需填写完整 40 位 SHA。
       placeholder: n7.1
   - type: input
+    id: package_format
+    attributes:
+      label: 打包格式
+      description: "可选值：tar.gz / zip / nuget"
+      value: tar.gz
+    validations:
+      required: true
+  - type: input
     id: target_platform
     attributes:
       label: 目标平台
-      description: "可选值：linux / macos / windows / all"
+      description: "可选值：linux / macos / windows"
       value: linux
     validations:
       required: true
@@ -33,16 +41,8 @@ body:
     id: target_arch
     attributes:
       label: 目标指令集
-      description: "可选值：x86_64 / x86 / arm64 / armv7 / universal"
+      description: "可选值：x86_64 / x86 / arm64 / armv7 / universal / all（all 仅限 NuGet）"
       value: x86_64
-    validations:
-      required: true
-  - type: input
-    id: package_format
-    attributes:
-      label: 打包格式
-      description: "可选值：tar.gz / zip / nuget"
-      value: tar.gz
     validations:
       required: true
   - type: textarea

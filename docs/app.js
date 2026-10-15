@@ -153,19 +153,24 @@ function renderRepositoryInfo() {
 
 // ── Form helpers ────────────────────────────────────────────────────────────
 
-// Labels are technical names except the few that need translation.
-function archOptions(platform) {
-  return {
+// Labels are technical names except the few that need translation. NuGet packs every
+// architecture of a platform into one package ("all"); the other formats can merge the two
+// macOS architectures into a fat binary ("universal").
+function archOptions(platform, packageFormat) {
+  const merged = packageFormat === 'nuget'
+    ? [['all', t('arch.all')]]
+    : platform === 'macos' ? [['universal', 'Universal (fat binary)']] : [];
+  return [...({
     linux: [['x86_64', 'x86_64'], ['x86', 'x86 (32-bit)'], ['arm64', 'arm64 (AArch64)'], ['armv7', 'armv7 (ARM 32-bit)']],
-    macos: [['x86_64', 'x86_64 (Intel)'], ['arm64', 'arm64 (Apple Silicon)'], ['universal', 'Universal (fat binary)']],
-    windows: [['x86_64', 'x86_64'], ['x86', t('arch.x86.experimental')], ['arm64', 'arm64 (AArch64)']],
-    all: [['x86_64', 'x86_64'], ['arm64', 'arm64'], ['universal', t('arch.universal.all')]],
-  }[platform] || [];
+    macos: [['x86_64', 'x86_64 (Intel)'], ['arm64', 'arm64 (Apple Silicon)']],
+    windows: [['x86_64', 'x86_64'], ['x86', 'x86 (32-bit)'], ['arm64', 'arm64 (AArch64)']],
+  }[platform] || []), ...merged];
 }
 
+// Keeps the current architecture when the new platform / format still offers it.
 function updateArchOptions() {
   const current = targetArchSelect.value;
-  targetArchSelect.replaceChildren(...archOptions(targetPlatformSelect.value).map(([value, label]) => {
+  targetArchSelect.replaceChildren(...archOptions(targetPlatformSelect.value, packageFormatSelect.value).map(([value, label]) => {
     const opt = document.createElement('option');
     opt.value = value;
     opt.textContent = label;
@@ -753,7 +758,10 @@ targetPlatformSelect.addEventListener('change', () => {
   updateArchOptions();
   syncConfigUI(); // platform-specific components (e.g. https) may change availability
 });
-packageFormatSelect.addEventListener('change', syncConfigUI); // NuGet allows shared linking only
+packageFormatSelect.addEventListener('change', () => {
+  updateArchOptions(); // "all" is NuGet only, "universal" is not offered for NuGet
+  syncConfigUI(); // NuGet allows shared linking only
+});
 targetArchSelect.addEventListener('change', syncConfigUI); // third-party libraries depend on the target
 
 state.config = loadSavedConfig();

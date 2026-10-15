@@ -76,13 +76,34 @@ def package_version(ffmpeg_version, run_number):
     return ".".join(parts + [str(run_number)])
 
 
-def license_expression(configure):
+def license_state(configure):
     """Follow configure's last-wins handling of --enable/--disable-gpl/version3/nonfree."""
     state = {"gpl": False, "version3": False, "nonfree": False}
     for token in configure.split():
         match = re.fullmatch(r"--(enable|disable)-(gpl|version3|nonfree)", token)
         if match:
             state[match.group(2)] = match.group(1) == "enable"
+    return state
+
+
+def license_label(configure):
+    """GPL, LGPL, GPLv3, LGPLv3 or NonFree, as used in the package ID."""
+    state = license_state(configure)
+    if state["nonfree"]:
+        return "NonFree"
+    return ("GPL" if state["gpl"] else "LGPL") + ("v3" if state["version3"] else "")
+
+
+def platform_label(rids):
+    """The RID for a single-RID package, else the OS prefix (win / linux / osx) they share."""
+    if len(rids) == 1:
+        return rids[0]
+    systems = {rid.split("-")[0] for rid in rids}
+    return systems.pop() if len(systems) == 1 else ""
+
+
+def license_expression(configure):
+    state = license_state(configure)
     if state["nonfree"]:
         return None
     if state["gpl"]:
@@ -211,7 +232,6 @@ def main():
         fail("usage: pack-nuget.py <archives-dir> <output-dir>")
     archives_dir, output_dir = Path(sys.argv[1]), Path(sys.argv[2]).resolve()
     owner = os.environ.get("PACKAGE_OWNER", "").strip() or "ffmpeg-auto-builder"
-    package_id = re.sub(r"[^A-Za-z0-9._-]", "", owner) + ".FFmpeg"
     configure = os.environ.get("CONFIGURE_OPTIONS", "")
 
     archives = {}
@@ -245,6 +265,9 @@ def main():
                 windows_import_libs[rid] = sorted(p.name for p in (tree / "bin").glob("*.lib")) if (tree / "bin").is_dir() else []
 
         rids = sorted(archives)
+        # <owner>.FFmpeg.<License>[.<platform>], e.g. Owner.FFmpeg.LGPL.win-x64 or Owner.FFmpeg.GPL.linux.
+        parts = [re.sub(r"[^A-Za-z0-9_-]", "", owner), "FFmpeg", license_label(configure), platform_label(rids)]
+        package_id = ".".join(part for part in parts if part)
         version = package_version(buildinfo.get("ffmpeg_version"), os.environ.get("RUN_NUMBER", "0"))
 
         # An empty lib/ asset marks the package as compatible with .NET projects.

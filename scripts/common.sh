@@ -53,6 +53,27 @@ sanitize_configure_options() {
   done
 }
 
+# License of a build from its configure flags, following configure's last-wins handling:
+# gpl, lgpl, gplv3, lgplv3 or nonfree.
+license_id() {
+  local gpl=false version3=false nonfree=false token
+  for token in "$@"; do
+    case "$token" in
+      --enable-gpl)       gpl=true ;;
+      --disable-gpl)      gpl=false ;;
+      --enable-version3)  version3=true ;;
+      --disable-version3) version3=false ;;
+      --enable-nonfree)   nonfree=true ;;
+      --disable-nonfree)  nonfree=false ;;
+    esac
+  done
+  if [[ "$nonfree" == true ]]; then
+    echo nonfree
+  else
+    echo "$([[ "$gpl" == true ]] && echo gpl || echo lgpl)$([[ "$version3" == true ]] && echo v3)"
+  fi
+}
+
 cpu_count() {
   if command -v nproc >/dev/null 2>&1; then
     nproc
