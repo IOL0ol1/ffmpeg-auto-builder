@@ -12,7 +12,7 @@ msg() {
   case "${ISSUE_LANG:-en}/$key" in
     ja/platform)    printf 'ターゲットプラットフォームが不正です：%s（linux / macos / windows / all のいずれか）' "$arg" ;;
     ja/arch)        printf 'ターゲットアーキテクチャが不正です：%s（x86_64 / x86 / arm64 / armv7 / universal のいずれか）' "$arg" ;;
-    ja/format)      printf 'パッケージ形式が不正です：%s（tar.gz / zip のいずれか）' "$arg" ;;
+    ja/format)      printf 'パッケージ形式が不正です：%s（tar.gz / zip / nuget のいずれか）' "$arg" ;;
     ja/repo)        printf 'GitHub リポジトリのみ対応しています：%s' "$arg" ;;
     ja/ref)         printf 'ブランチ / タグ / コミットが不正です：%s' "$arg" ;;
     ja/token)       printf 'configure フラグに使用できない文字が含まれています：%s' "$arg" ;;
@@ -20,7 +20,7 @@ msg() {
     ja/target)      printf 'ビルドできるターゲットがありません：%s' "$arg" ;;
     zh-CN/platform) printf '目标平台无效：%s（可选 linux / macos / windows / all）' "$arg" ;;
     zh-CN/arch)     printf '目标指令集无效：%s（可选 x86_64 / x86 / arm64 / armv7 / universal）' "$arg" ;;
-    zh-CN/format)   printf '打包格式无效：%s（可选 tar.gz / zip）' "$arg" ;;
+    zh-CN/format)   printf '打包格式无效：%s（可选 tar.gz / zip / nuget）' "$arg" ;;
     zh-CN/repo)     printf '源码仓库只支持 GitHub 地址：%s' "$arg" ;;
     zh-CN/ref)      printf '源码分支 / tag / commit 无效：%s' "$arg" ;;
     zh-CN/token)    printf 'configure 参数含有不允许的字符：%s' "$arg" ;;
@@ -28,7 +28,7 @@ msg() {
     zh-CN/target)   printf '没有可构建的目标：%s' "$arg" ;;
     */platform)     printf 'Invalid target platform: %s (one of linux / macos / windows / all)' "$arg" ;;
     */arch)         printf 'Invalid target architecture: %s (one of x86_64 / x86 / arm64 / armv7 / universal)' "$arg" ;;
-    */format)       printf 'Invalid package format: %s (one of tar.gz / zip)' "$arg" ;;
+    */format)       printf 'Invalid package format: %s (one of tar.gz / zip / nuget)' "$arg" ;;
     */repo)         printf 'Only GitHub repositories are supported: %s' "$arg" ;;
     */ref)          printf 'Invalid branch / tag / commit: %s' "$arg" ;;
     */token)        printf 'configure flags contain characters that are not allowed: %s' "$arg" ;;
@@ -68,7 +68,7 @@ case "$target_arch" in
   *) fail "$(msg arch "$target_arch")" ;;
 esac
 case "$package_format" in
-  tar.gz | zip) ;;
+  tar.gz | zip | nuget) ;;
   *) fail "$(msg format "$package_format")" ;;
 esac
 
@@ -85,6 +85,14 @@ for token in "${raw_tokens[@]}"; do
 done
 sanitize_configure_options "$configure_options"
 configure_options="${SANITIZED_CONFIGURE_ARGS[*]}"
+
+# NuGet packages carry shared libraries only; appended last so they win over earlier flags.
+# The platform builds are archived as zip and combined into one .nupkg by the release job.
+archive_format="$package_format"
+if [[ "$package_format" == "nuget" ]]; then
+  configure_options+=" --enable-shared --disable-static"
+  archive_format="zip"
+fi
 
 release_tag="ffmpeg-${target_platform}-${target_arch}-$(date -u +%Y%m%dt%H%M%S)-${tag_suffix}"
 validate_release_tag "$release_tag"
@@ -122,7 +130,8 @@ for p in "${platforms[@]}"; do
     macos/universal)
       add macos macos-15-intel x86_64 "" "" "" true
       add macos macos-15 arm64 "" "" "" true
-      needs_lipo="true"
+      # NuGet uses the two slices as osx-x64 / osx-arm64 instead of a merged binary.
+      [[ "$package_format" == "nuget" ]] || needs_lipo="true"
       ;;
     windows/x86_64 | windows/universal) add windows windows-latest x86_64 "" MINGW64 "$mingw64_pkgs" ;;
     windows/x86)     add windows windows-latest x86 "" MINGW32 "$mingw32_pkgs" ;;
@@ -142,6 +151,7 @@ matrix="$(IFS=,; printf '{"include":[%s]}' "${entries[*]}")"
   echo "target_platform=${target_platform}"
   echo "target_arch=${target_arch}"
   echo "package_format=${package_format}"
+  echo "archive_format=${archive_format}"
   echo "configure_options=${configure_options}"
   echo "release_tag=${release_tag}"
   echo "matrix=${matrix}"

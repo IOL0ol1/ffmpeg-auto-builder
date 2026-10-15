@@ -19,9 +19,10 @@ export const SEGMENTS = [
     id: 'linkage',
     default: 'static',
     options: [
-      { id: 'static', flags: ['--enable-static', '--disable-shared'] },
+      // NuGet packages carry shared libraries only (P/Invoke and MSVC import libraries need them).
+      { id: 'static', flags: ['--enable-static', '--disable-shared'], excludedFormats: ['nuget'] },
       { id: 'shared', flags: ['--enable-shared', '--disable-static'] },
-      { id: 'both', flags: ['--enable-static', '--enable-shared'] },
+      { id: 'both', flags: ['--enable-static', '--enable-shared'], excludedFormats: ['nuget'] },
     ],
   },
   {
@@ -175,7 +176,24 @@ export function normalizeConfig(raw) {
 
 // ── Availability ─────────────────────────────────────────────────────────────
 
-// context: { platform } — the selected target platform ("all" allows everything).
+// context: { platform, packageFormat } — the selected target platform and package format.
+export function segmentOptionStatus(context, segmentId, optionId) {
+  const option = SEGMENTS.find((segment) => segment.id === segmentId).options.find((item) => item.id === optionId);
+  if (option?.excludedFormats?.includes(context.packageFormat)) {
+    return { available: false, reason: `${context.packageFormat}Shared` };
+  }
+  return { available: true };
+}
+
+// The stored choice when it is available, otherwise the first available option. The stored
+// choice is kept, so it comes back when the restriction is lifted.
+export function effectiveSegmentValue(config, context, segmentId) {
+  const segment = SEGMENTS.find((item) => item.id === segmentId);
+  if (segmentOptionStatus(context, segmentId, config[segmentId]).available) return config[segmentId];
+  return segment.options.find((option) => segmentOptionStatus(context, segmentId, option.id).available)?.id ?? config[segmentId];
+}
+
+// The platform "all" allows everything.
 // `reason` is a code translated by the page as reason.<code>.
 export function componentStatus(config, context, groupId, name) {
   const group = componentGroup(groupId);
@@ -253,7 +271,10 @@ export function mergeTokens(tokens) {
 // Order: segments → toggles → components → custom; later tokens override earlier ones.
 export function buildConfigure(config, context = {}) {
   const tokens = mergeTokens([
-    ...SEGMENTS.flatMap((segment) => segment.options.find((option) => option.id === config[segment.id])?.flags || []),
+    ...SEGMENTS.flatMap((segment) => {
+      const value = effectiveSegmentValue(config, context, segment.id);
+      return segment.options.find((option) => option.id === value)?.flags || [];
+    }),
     ...TOGGLES.flatMap((item) => (config.toggles[item.id] ? item.on : item.off) || []),
     ...(config.componentMode === 'slim'
       ? ['--disable-everything', ...COMPONENT_GROUPS

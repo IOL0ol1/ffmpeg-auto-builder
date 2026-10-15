@@ -30,6 +30,7 @@ const MESSAGES = {
     'form.platform.all': '全部平台（并行）',
     'form.arch': '目标指令集',
     'form.package': '打包格式',
+    'form.package.nugetHint': '生成一个 NuGet 包，可用于 C++（vcxproj）和 C# 项目；选择全部平台时，所有平台合并在同一个包中。只支持共享库。',
     'form.submit': '在 GitHub 上提交编译',
     'form.repoUnknown': '无法识别当前仓库，请检查 Pages 访问地址。',
     'arch.x86.experimental': 'x86（32-bit，实验性）',
@@ -118,6 +119,7 @@ const MESSAGES = {
     'reason.gpl': '仅限 GPL：需要把许可证切换为 GPL',
     'reason.needs': '需要开启 {lib}',
     'reason.tls': 'Linux 编译环境没有 TLS 库，仅 macOS / Windows 可用',
+    'reason.nugetShared': 'NuGet 包只包含共享库',
     'note.noPrograms': '未选择任何程序，将只生成库和头文件。',
     'note.noCodecs': '未选择任何编解码器，只能做封装格式转换。',
 
@@ -175,6 +177,7 @@ const MESSAGES = {
     'form.platform.all': 'All platforms (parallel)',
     'form.arch': 'Target architecture',
     'form.package': 'Package format',
+    'form.package.nugetHint': 'Creates one NuGet package for C++ (vcxproj) and C# projects; with all platforms selected, every platform goes into the same package. Shared libraries only.',
     'form.submit': 'Submit on GitHub',
     'form.repoUnknown': 'Cannot detect this repository; check the Pages URL.',
     'arch.x86.experimental': 'x86 (32-bit, experimental)',
@@ -263,6 +266,7 @@ const MESSAGES = {
     'reason.gpl': 'GPL only: switch the license to GPL',
     'reason.needs': 'Requires {lib}',
     'reason.tls': 'The Linux build environment has no TLS library; macOS / Windows only',
+    'reason.nugetShared': 'NuGet packages contain shared libraries only',
     'note.noPrograms': 'No programs selected; only libraries and headers will be built.',
     'note.noCodecs': 'No codecs selected; only remuxing will be possible.',
 
@@ -320,6 +324,7 @@ const MESSAGES = {
     'form.platform.all': 'すべて（並列）',
     'form.arch': 'ターゲットアーキテクチャ',
     'form.package': 'パッケージ形式',
+    'form.package.nugetHint': 'C++（vcxproj）と C# プロジェクトで使える NuGet パッケージを 1 つ生成します。すべてのプラットフォームを選ぶと、全プラットフォームが同じパッケージにまとめられます。共有ライブラリのみ対応しています。',
     'form.submit': 'GitHub で依頼する',
     'form.repoUnknown': 'リポジトリを判別できません。Pages の URL を確認してください。',
     'arch.x86.experimental': 'x86（32-bit、実験的）',
@@ -408,6 +413,7 @@ const MESSAGES = {
     'reason.gpl': 'GPL 専用：ライセンスを GPL に切り替えてください',
     'reason.needs': '{lib} を有効にする必要があります',
     'reason.tls': 'Linux のビルド環境には TLS ライブラリがないため、macOS / Windows でのみ利用できます',
+    'reason.nugetShared': 'NuGet パッケージは共有ライブラリのみ対応しています',
     'note.noPrograms': 'プログラムが選択されていないため、ライブラリとヘッダーのみ生成されます。',
     'note.noCodecs': 'コーデックが選択されていないため、コンテナの変換のみ可能です。',
 

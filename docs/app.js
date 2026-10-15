@@ -1,7 +1,7 @@
 import {
   COMPONENT_GROUPS, SEGMENTS, TOGGLE_GROUPS,
-  buildConfigure, componentStatus, defaultConfig, effectiveComponents, normalizeConfig,
-  requiresGpl, sanitizeCustom, setToggle,
+  buildConfigure, componentStatus, defaultConfig, effectiveComponents, effectiveSegmentValue, normalizeConfig,
+  requiresGpl, sanitizeCustom, segmentOptionStatus, setToggle,
 } from './configure.js';
 import {
   LANGUAGES, detectLanguage, getLanguage, setLanguage, t, translateStatic,
@@ -27,6 +27,8 @@ const formMessageNode = document.querySelector('#form-message');
 const buildListNode = document.querySelector('#build-list');
 const targetPlatformSelect = document.querySelector('#target-platform');
 const targetArchSelect = document.querySelector('#target-arch');
+const packageFormatSelect = document.querySelector('#package-format');
+const packageHintNode = document.querySelector('#package-hint');
 
 const BUILD_TITLE_PREFIX = '[build]';
 // Unauthenticated GitHub API calls are limited to 60/hour per IP; each refresh costs two.
@@ -179,7 +181,7 @@ function updateArchOptions() {
 // unavailable in the controls themselves instead of being validated afterwards.
 
 function configContext() {
-  return { platform: targetPlatformSelect.value };
+  return { platform: targetPlatformSelect.value, packageFormat: packageFormatSelect.value };
 }
 
 function loadSavedConfig() {
@@ -368,9 +370,18 @@ function syncConfigUI() {
   const context = configContext();
 
   SEGMENTS.forEach((segment) => {
-    syncSegmented(segmentsNode.querySelector(`[data-segment="${segment.id}"]`), config[segment.id]);
-    segmentsNode.querySelector(`[data-hint-for="${segment.id}"]`).textContent = t(`option.${segment.id}.${config[segment.id]}.hint`);
+    const control = segmentsNode.querySelector(`[data-segment="${segment.id}"]`);
+    const value = effectiveSegmentValue(config, context, segment.id);
+    syncSegmented(control, value);
+    control.querySelectorAll('button').forEach((button) => {
+      const status = segmentOptionStatus(context, segment.id, button.dataset.value);
+      const option = segment.options.find((item) => item.id === button.dataset.value);
+      button.disabled = !status.available;
+      button.title = status.available ? (option.flags.join(' ') || t('config.noFlags')) : t(`reason.${status.reason}`);
+    });
+    segmentsNode.querySelector(`[data-hint-for="${segment.id}"]`).textContent = t(`option.${segment.id}.${value}.hint`);
   });
+  packageHintNode.textContent = context.packageFormat === 'nuget' ? t('form.package.nugetHint') : '';
 
   toggleGroupsNode.querySelectorAll('[data-toggle]').forEach((chip) => {
     chip.querySelector('input').checked = Boolean(config.toggles[chip.dataset.toggle]);
@@ -727,6 +738,7 @@ targetPlatformSelect.addEventListener('change', () => {
   updateArchOptions();
   syncConfigUI(); // platform-specific components (e.g. https) may change availability
 });
+packageFormatSelect.addEventListener('change', syncConfigUI); // NuGet allows shared linking only
 
 state.config = loadSavedConfig();
 applyLanguage(detectLanguage());

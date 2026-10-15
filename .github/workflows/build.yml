@@ -43,6 +43,7 @@ on:
         options:
           - tar.gz
           - zip
+          - nuget
       configure_options:
         description: FFmpeg configure options
         required: true
@@ -79,6 +80,7 @@ jobs:
       target_platform: ${{ steps.params.outputs.target_platform }}
       target_arch: ${{ steps.params.outputs.target_arch }}
       package_format: ${{ steps.params.outputs.package_format }}
+      archive_format: ${{ steps.params.outputs.archive_format }}
       configure_options: ${{ steps.params.outputs.configure_options }}
       release_tag: ${{ steps.params.outputs.release_tag }}
       matrix: ${{ steps.params.outputs.matrix }}
@@ -149,7 +151,7 @@ jobs:
       TARGET_PLATFORM: ${{ matrix.platform }}
       TARGET_ARCH: ${{ matrix.arch }}
       CROSS_PREFIX: ${{ matrix.cross_prefix }}
-      PACKAGE_FORMAT: ${{ needs.setup.outputs.package_format }}
+      PACKAGE_FORMAT: ${{ needs.setup.outputs.archive_format }}
       CONFIGURE_OPTIONS: ${{ needs.setup.outputs.configure_options }}
       RELEASE_TAG: ${{ needs.setup.outputs.release_tag }}
       MACOSX_DEPLOYMENT_TARGET: '11.0'
@@ -223,7 +225,7 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 30
     env:
-      PACKAGE_FORMAT: ${{ needs.setup.outputs.package_format }}
+      PACKAGE_FORMAT: ${{ needs.setup.outputs.archive_format }}
       RELEASE_TAG: ${{ needs.setup.outputs.release_tag }}
     steps:
       - name: Check out repository
@@ -274,11 +276,35 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Download build artifacts
+        if: needs.setup.outputs.package_format != 'nuget'
         uses: actions/download-artifact@v4
         with:
           pattern: ffmpeg-*-${{ needs.setup.outputs.release_tag }}
           path: release-assets
           merge-multiple: true
+
+      # NuGet: combine every platform archive (macOS universal slices included) into one .nupkg.
+      - name: Download platform archives for NuGet
+        if: needs.setup.outputs.package_format == 'nuget'
+        uses: actions/download-artifact@v4
+        with:
+          pattern: '*-${{ needs.setup.outputs.release_tag }}'
+          path: nuget-input
+          merge-multiple: true
+
+      - name: Set up .NET
+        if: needs.setup.outputs.package_format == 'nuget'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Pack NuGet package
+        if: needs.setup.outputs.package_format == 'nuget'
+        shell: bash
+        env:
+          PACKAGE_OWNER: ${{ github.repository_owner }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: python3 -I scripts/pack-nuget.py nuget-input release-assets
 
       - name: Publish draft release
         id: publish

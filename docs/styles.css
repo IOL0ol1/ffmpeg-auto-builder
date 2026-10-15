@@ -581,3 +581,12 @@ button.small {
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+
+.segmented button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.segmented button:disabled:hover {
+  background: transparent;
+}

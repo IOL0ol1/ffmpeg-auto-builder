@@ -88,7 +88,8 @@ fix_pkgconfig() {
   done
 }
 
-# Point binaries at ../lib and shared libraries at their own directory.
+# Point binaries at ../lib (install tree) and their own directory (the flattened
+# runtimes/<rid>/native layout of the NuGet package); libraries at their own directory.
 fix_linux_rpath() {
   local libs=("$install_root"/lib/*.so*)
   [[ "${#libs[@]}" -gt 0 ]] || return 0
@@ -96,7 +97,7 @@ fix_linux_rpath() {
   local f
   for f in "$install_root"/bin/*; do
     if [[ -f "$f" && ! -L "$f" ]]; then
-      patchelf --set-rpath '$ORIGIN/../lib' "$f" 2>/dev/null || true
+      patchelf --set-rpath '$ORIGIN/../lib:$ORIGIN' "$f" 2>/dev/null || true
     fi
   done
   for f in "${libs[@]}"; do
@@ -112,23 +113,26 @@ fix_macos_install_names() {
   local libs=("$lib_dir"/*.dylib)
   [[ "${#libs[@]}" -gt 0 ]] || return 0
 
-  local f dep rpath
+  local f dep rpath rpaths
   for f in "$install_root"/bin/* "${libs[@]}"; do
     [[ -f "$f" && ! -L "$f" ]] || continue
     lipo -info "$f" >/dev/null 2>&1 || continue
 
     if [[ "$f" == *.dylib ]]; then
       install_name_tool -id "@rpath/$(basename "$f")" "$f"
-      rpath='@loader_path'
+      rpaths=('@loader_path')
     else
-      rpath='@loader_path/../lib'
+      # ../lib for the install tree, the own directory for the NuGet runtimes layout.
+      rpaths=('@loader_path/../lib' '@loader_path')
     fi
 
     while IFS= read -r dep; do
       install_name_tool -change "$dep" "@rpath/$(basename "$dep")" "$f"
     done < <(otool -L "$f" | awk -v p="$lib_dir/" 'NR > 1 && index($1, p) == 1 { print $1 }')
 
-    install_name_tool -add_rpath "$rpath" "$f" 2>/dev/null || true
+    for rpath in "${rpaths[@]}"; do
+      install_name_tool -add_rpath "$rpath" "$f" 2>/dev/null || true
+    done
     codesign --force --sign - "$f" >/dev/null 2>&1 || true
   done
 }
@@ -175,6 +179,7 @@ compiler_version="$(${base_cc:-cc} --version 2>/dev/null | head -n 1 || true)"
   echo "source_repository: ${SOURCE_REPOSITORY:-}"
   echo "source_ref: ${SOURCE_REF:-<default branch>}"
   echo "source_commit: ${SOURCE_COMMIT:-}"
+  echo "ffmpeg_version: $(head -n 1 "$source_dir/RELEASE" 2>/dev/null || true)"
   echo "platform: ${TARGET_PLATFORM}"
   echo "arch: ${TARGET_ARCH}"
   echo "compiler: ${compiler_version}"

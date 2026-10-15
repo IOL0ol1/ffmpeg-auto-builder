@@ -41,7 +41,7 @@ body:
     id: package_format
     attributes:
       label: 打包格式
-      description: "可选值：tar.gz / zip"
+      description: "可选值：tar.gz / zip / nuget"
       value: tar.gz
     validations:
       required: true

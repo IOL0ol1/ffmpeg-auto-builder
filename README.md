@@ -14,6 +14,7 @@ A template repository for building FFmpeg online with **GitHub Pages + GitHub Is
 - Linux / macOS / Windows builds run in parallel; macOS can produce an x86_64 + arm64 universal binary.
 - Linux supports x86, arm64 and armv7; Windows supports x86_64, x86 and arm64 through MSYS2.
 - ccache for incremental builds, a smoke test, and a single draft release per build (with `SHA256SUMS.txt`).
+- Packages as `tar.gz`, `zip` or a **NuGet package** for C++ and C# projects; with all platforms selected, one NuGet package contains every platform.
 - Packages work right after extraction: shared builds get fixed rpaths / install names, `.pc` files use relative paths, Windows packages include the MinGW runtime DLLs, and every package contains `BUILDINFO.txt`.
 - The page lists recent builds, their status and a job/step log summary.
 - The page can be switched between **English / 简体中文 / 日本語** (defaults to the browser language); the generated issue and the workflow's replies use the same language.
@@ -34,6 +35,7 @@ A template repository for building FFmpeg online with **GitHub Pages + GitHub Is
     ├── resolve-params.sh         # Validates parameters, creates the release tag and build matrix
     ├── install-deps.sh           # Installs Linux / macOS dependencies (apt / brew)
     ├── build-ffmpeg.sh           # Builds, fixes install paths, runs the smoke test and packages
+    ├── pack-nuget.py             # Combines the platform archives into one NuGet package
     └── lipo-universal.sh         # Merges x86_64 + arm64 packages into a macOS universal binary
 ```
 
@@ -73,7 +75,7 @@ Open the Pages URL from step 1. The top shows the detected repository and whethe
 | Branch / tag / commit | Optional; commits need the full 40-character SHA | `n7.1`, `release/7.1` |
 | Target platform | `Linux` / `macOS` / `Windows` / `All platforms` | `Linux` |
 | Target architecture | Depends on the platform; see the table below | `x86_64` |
-| Package format | `tar.gz` or `zip` | `zip` |
+| Package format | `tar.gz`, `zip` or `NuGet (.nupkg)` (see "NuGet package") | `zip` |
 | Build options | Visual controls for build type, linking, license, programs & libraries, features and components, plus optional custom flags; the final configure flags are shown live (see "configure options") | Release + static + GPL |
 
 Click **Submit on GitHub**. The page checks the inputs, then opens GitHub's new-issue page in a new tab with everything filled in.
@@ -136,6 +138,35 @@ Open **Actions → build-ffmpeg → Run workflow** and fill in the same paramete
 > - `universal` builds x86_64 on Linux and Windows.
 > - If some platforms fail, the successful packages are still published to the draft release.
 
+## NuGet package
+
+With **Package format = NuGet**, the release contains one `.nupkg` instead of per-platform archives. With **All platforms** selected, every platform goes into the same package. NuGet packages always use **shared linking** (the page locks the linking option, and the workflow appends `--enable-shared --disable-static`).
+
+- **Package ID**: `<repository owner>.FFmpeg` (e.g. `IOL0ol1.FFmpeg`); **version**: the FFmpeg version from the source's `RELEASE` file plus the workflow run number, e.g. `8.0.0.57`.
+- **License expression** follows the configure flags (`LGPL-2.1-or-later`, `GPL-2.0-or-later`, or the `-3.0` variants with `--enable-version3`).
+
+```text
+build/native/<rid>/            complete files per platform, same as the zip output
+                               (include/, lib/, bin/, share/, BUILDINFO.txt)
+build/native/<id>.targets      C++ (vcxproj) integration
+runtimes/<rid>/native/         executables and shared libraries for .NET
+lib/netstandard2.0/_._         marks the package as compatible with .NET projects
+README.md                      package readme
+```
+
+RIDs: `linux-x64`, `linux-x86`, `linux-arm64`, `linux-arm`, `osx-x64`, `osx-arm64`, `win-x64`, `win-x86`, `win-arm64` (macOS universal contributes `osx-x64` and `osx-arm64`).
+
+**C# / .NET**: add the package to an SDK-style project; `runtimes/<rid>/native/` is copied to the output automatically. Call FFmpeg with P/Invoke (or FFmpeg.AutoGen) using the versioned library names — `avutil-61.dll` on Windows, `libavutil.so.61` on Linux, `libavutil.61.dylib` on macOS:
+
+```csharp
+[DllImport("avutil-61")]
+static extern IntPtr av_version_info();
+```
+
+On Linux and macOS, `ffmpeg` / `ffprobe` from the package need `chmod +x` before they can be run.
+
+**C++ (Visual C++, vcxproj)**: install the package (packages.config) and `build/native/<id>.targets` adds, for x64 / Win32 / ARM64, the include directory, the `__STDC_CONSTANT_MACROS` define required by FFmpeg headers, the import libraries (`avcodec.lib`, …) and copies the DLLs next to the executable. Set the `FFmpegRid` property to choose a RID manually. Other build systems can use `build/native/<rid>/include`, `lib` and `lib/pkgconfig` directly.
+
 ## configure options
 
 - Flags are separated by spaces or new lines and may only contain `[-+./:=,@%A-Za-z0-9_]`; values with `` ; & | $ > ` `` or spaces are rejected (so flags such as `--extra-cflags="-O3 -march=native"` cannot be used).
@@ -182,7 +213,7 @@ The page turns common configure switches into visual controls and builds the fla
    - `scripts/build-ffmpeg.sh`: configure → make → make install → fix rpath / install names / `.pc` paths → bundle Windows runtime DLLs → `ffmpeg -version` smoke test (skipped when cross-compiling) → write `BUILDINFO.txt` → package;
    - uploads the artifact.
 4. **lipo** (macOS universal only): merges executables, shared libraries and static libraries of both architectures.
-5. **release**: collects every successful package, generates `SHA256SUMS.txt`, creates one draft release, then replies on the issue and closes it on success.
+5. **release**: collects every successful package (for NuGet, `scripts/pack-nuget.py` first combines the platform archives into one `.nupkg`), generates `SHA256SUMS.txt`, creates one draft release, then replies on the issue and closes it on success.
 
 ## Security
 

@@ -14,6 +14,7 @@
 - 支持 Linux / macOS / Windows 三平台并行构建，macOS 可生成 x86_64 + arm64 通用（Universal）二进制。
 - Linux 支持 x86、arm64、armv7；Windows 通过 MSYS2 支持 x86_64、x86、arm64。
 - ccache 增量编译、冒烟测试、统一发布一个 Draft Release（附 `SHA256SUMS.txt`）。
+- 打包格式支持 `tar.gz`、`zip` 和可用于 C++ / C# 项目的 **NuGet 包**；选择全部平台时，一个 NuGet 包包含所有平台。
 - 产物可直接解压使用：共享库构建自动修正 rpath / install name，`.pc` 文件改为相对路径，Windows 包自动附带 MinGW 运行时 DLL，包内附 `BUILDINFO.txt`。
 - 网页展示最近的编译记录、运行状态和 Job/Step 日志摘要。
 - 网页支持 **English / 简体中文 / 日本語** 切换（默认跟随浏览器语言），生成的 Issue 以及工作流在 Issue 中的回复都会使用同一语言。
@@ -34,6 +35,7 @@
     ├── resolve-params.sh         # 校验参数、生成 release tag 与构建矩阵
     ├── install-deps.sh           # Linux / macOS 依赖安装（apt / brew）
     ├── build-ffmpeg.sh           # 编译、修正产物路径、冒烟测试并打包
+    ├── pack-nuget.py             # 将各平台压缩包合并为一个 NuGet 包
     └── lipo-universal.sh         # 将 x86_64 + arm64 包合并为 macOS 通用二进制
 ```
 
@@ -73,7 +75,7 @@
 | 源码分支 / tag / commit | 可选；commit 需填完整 40 位 SHA | `n7.1`、`release/7.1` |
 | 目标平台 | `Linux` / `macOS` / `Windows` / `全部平台` | `Linux` |
 | 目标指令集 | 选项随平台变化，见下方对照表 | `x86_64` |
-| 打包格式 | `tar.gz` 或 `zip` | `zip` |
+| 打包格式 | `tar.gz`、`zip` 或 `NuGet (.nupkg)`（见“NuGet 包”） | `zip` |
 | 编译参数 | 用可视化控件选择构建类型、链接方式、许可证、程序与库、功能特性和组件，必要时补充自定义参数；下方实时显示最终 configure 参数（详见“configure 参数说明”） | Release + 静态 + GPL |
 
 点击 **在 GitHub 上提交编译**，页面会先在本地校验参数，然后在新标签页打开 GitHub 的新建 Issue 页面，所有参数都已填好。
@@ -136,6 +138,35 @@ BUILDINFO.txt   源码仓库、ref、commit、编译器、configure 参数
 > - Linux / Windows 选择 `universal` 时按 x86_64 构建。
 > - 部分平台失败时，成功的产物仍会发布到 Draft Release。
 
+## NuGet 包
+
+**打包格式选择 NuGet** 时，Release 中是一个 `.nupkg`，而不是各平台的压缩包；选择 **全部平台** 时，所有平台合并在同一个包中。NuGet 包固定使用**共享库**（网页会锁定链接方式，工作流也会追加 `--enable-shared --disable-static`）。
+
+- **包 ID**：`<仓库所有者>.FFmpeg`（如 `IOL0ol1.FFmpeg`）；**版本**：源码 `RELEASE` 文件中的 FFmpeg 版本加上工作流运行编号，如 `8.0.0.57`。
+- **许可证表达式**按 configure 参数确定（`LGPL-2.1-or-later`、`GPL-2.0-or-later`，带 `--enable-version3` 时为对应的 `-3.0` 版本）。
+
+```text
+build/native/<rid>/            每个平台的完整文件，与 zip 输出一致
+                               （include/、lib/、bin/、share/、BUILDINFO.txt）
+build/native/<id>.targets      C++（vcxproj）集成
+runtimes/<rid>/native/         供 .NET 使用的可执行文件和共享库
+lib/netstandard2.0/_._         让 .NET 项目可以安装此包
+README.md                      包说明
+```
+
+RID：`linux-x64`、`linux-x86`、`linux-arm64`、`linux-arm`、`osx-x64`、`osx-arm64`、`win-x64`、`win-x86`、`win-arm64`（macOS universal 会分别放入 `osx-x64` 和 `osx-arm64`）。
+
+**C# / .NET**：在 SDK 风格项目中添加此包，`runtimes/<rid>/native/` 会自动复制到输出目录。通过 P/Invoke（或 FFmpeg.AutoGen）按带版本号的库名调用——Windows 为 `avutil-61.dll`，Linux 为 `libavutil.so.61`，macOS 为 `libavutil.61.dylib`：
+
+```csharp
+[DllImport("avutil-61")]
+static extern IntPtr av_version_info();
+```
+
+在 Linux 和 macOS 上，包中的 `ffmpeg` / `ffprobe` 需要先 `chmod +x` 才能运行。
+
+**C++（Visual C++，vcxproj）**：安装此包（packages.config）后，`build/native/<id>.targets` 会为 x64 / Win32 / ARM64 自动添加头文件目录、FFmpeg 头文件所需的 `__STDC_CONSTANT_MACROS` 宏、导入库（`avcodec.lib` 等），并把 DLL 复制到可执行文件旁边；可通过 `FFmpegRid` 属性手动指定 RID。其它构建系统可直接使用 `build/native/<rid>/include`、`lib` 和 `lib/pkgconfig`。
+
 ## configure 参数说明
 
 - 参数以空格或换行分隔，仅允许 `[-+./:=,@%A-Za-z0-9_]` 字符，含 `` ; & | $ > ` `` 或空格的值会被拒绝（因此 `--extra-cflags="-O3 -march=native"` 这类带空格的参数无法使用）。
@@ -182,7 +213,7 @@ BUILDINFO.txt   源码仓库、ref、commit、编译器、configure 参数
    - `scripts/build-ffmpeg.sh`：configure → make → make install → 修正 rpath / install name / `.pc` 路径 → 打包 Windows 运行时 DLL → `ffmpeg -version` 冒烟测试（交叉编译跳过）→ 写入 `BUILDINFO.txt` → 打包；
    - 上传 Artifact。
 4. **lipo**（仅 macOS universal）：合并两个架构的可执行文件、动态库与静态库。
-5. **release**：汇总所有成功的产物，生成 `SHA256SUMS.txt`，一次性创建 Draft Release，然后在 Issue 中回复结果，成功则关闭 Issue。
+5. **release**：汇总所有成功的产物（NuGet 格式时先由 `scripts/pack-nuget.py` 把各平台压缩包合并为一个 `.nupkg`），生成 `SHA256SUMS.txt`，一次性创建 Draft Release，然后在 Issue 中回复结果，成功则关闭 Issue。
 
 ## 安全设计
 

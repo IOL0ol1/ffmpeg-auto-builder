@@ -41,7 +41,7 @@ body:
     id: package_format
     attributes:
       label: パッケージ形式
-      description: "tar.gz / zip のいずれか"
+      description: "tar.gz / zip / nuget のいずれか"
       value: tar.gz
     validations:
       required: true
