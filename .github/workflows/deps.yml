@@ -1,0 +1,72 @@
+name: build-deps
+
+# Builds the third-party libraries (deps/*.sh) for every supported target and saves them in
+# the Actions cache, so FFmpeg builds can reuse them. build-ffmpeg runs the same steps on a
+# cache miss; running this workflow ahead of time just warms the cache.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deps:
+    name: deps ${{ matrix.platform }}/${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { platform: linux, arch: x86_64, os: ubuntu-latest, container: 'quay.io/pypa/manylinux_2_28_x86_64' }
+          - { platform: linux, arch: arm64, os: ubuntu-24.04-arm, container: 'quay.io/pypa/manylinux_2_28_aarch64' }
+          - { platform: macos, arch: x86_64, os: macos-15-intel, container: '' }
+          - { platform: macos, arch: arm64, os: macos-15, container: '' }
+          - { platform: windows, arch: x86_64, os: ubuntu-latest, container: '' }
+          - { platform: windows, arch: x86, os: ubuntu-latest, container: '' }
+          - { platform: windows, arch: arm64, os: ubuntu-latest, container: '' }
+    runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
+    timeout-minutes: 180
+    env:
+      TARGET_PLATFORM: ${{ matrix.platform }}
+      TARGET_ARCH: ${{ matrix.arch }}
+      MACOSX_DEPLOYMENT_TARGET: '11.0'
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install build tools
+        shell: bash
+        run: ./scripts/install-deps.sh
+
+      - name: Locate dependency prefix
+        id: prefix
+        shell: bash
+        run: |
+          echo "DEPS_PREFIX=$GITHUB_WORKSPACE/.deps/prefix" >> "$GITHUB_ENV"
+          echo "toolchain=${{ hashFiles('scripts/build-deps.sh', 'scripts/toolchain.sh', 'scripts/install-deps.sh') }}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore dependencies
+        id: restore
+        uses: actions/cache/restore@v4
+        with:
+          path: .deps/prefix
+          key: deps-v1-${{ matrix.platform }}-${{ matrix.arch }}-${{ steps.prefix.outputs.toolchain }}-${{ hashFiles('deps/**') }}
+          restore-keys: deps-v1-${{ matrix.platform }}-${{ matrix.arch }}-${{ steps.prefix.outputs.toolchain }}-
+
+      - name: Build dependencies
+        if: steps.restore.outputs.cache-hit != 'true'
+        shell: bash
+        run: ./scripts/build-deps.sh
+
+      - name: Save dependencies
+        if: steps.restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .deps/prefix
+          key: deps-v1-${{ matrix.platform }}-${{ matrix.arch }}-${{ steps.prefix.outputs.toolchain }}-${{ hashFiles('deps/**') }}
+
+      - name: List libraries
+        shell: bash
+        run: |
+          ls -la .deps/prefix/lib
+          ls .deps/prefix/lib/pkgconfig

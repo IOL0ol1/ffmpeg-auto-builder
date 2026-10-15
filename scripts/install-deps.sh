@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Install the build tools for one target. Windows targets are cross-compiled on Linux with
+# llvm-mingw; linux/x86_64 and linux/arm64 run inside a manylinux_2_28 container.
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -7,30 +9,67 @@ source "$script_dir/common.sh"
 require_env TARGET_PLATFORM
 require_env TARGET_ARCH
 
+LLVM_MINGW_VERSION=20261006
+LLVM_MINGW_SHA256=5f9c6ed95b2d4bdb2869a488c5fd5857fbdabcf288a0aa3eb1da43f6a08d8ab4
+
+# Export a variable to later workflow steps (and this shell).
+export_env() {
+  export "$1=$2"
+  [[ -z "${GITHUB_ENV:-}" ]] || echo "$1=$2" >>"$GITHUB_ENV"
+}
+
+install_python_build_tools() {
+  # meson and ninja from PyPI are newer than most distribution packages.
+  if command -v pipx >/dev/null 2>&1; then
+    pipx install --force meson
+    pipx install --force ninja
+  else
+    python3 -m pip install --quiet --user --upgrade meson ninja
+  fi
+  [[ -z "${GITHUB_PATH:-}" ]] || echo "$HOME/.local/bin" >>"$GITHUB_PATH"
+  export PATH="$HOME/.local/bin:$PATH"
+}
+
 case "$TARGET_PLATFORM" in
   linux)
-    sudo apt-get update
-    sudo apt-get install -y build-essential pkg-config nasm zip ccache patchelf
+    if command -v dnf >/dev/null 2>&1; then
+      # manylinux_2_28 (AlmaLinux 8): already has gcc, cmake and patchelf.
+      dnf install -y --setopt=install_weak_deps=False \
+        nasm zip unzip xz bzip2 automake autoconf libtool make which
+      install_python_build_tools
+      command -v cmake >/dev/null || pipx install cmake
+    else
+      sudo apt-get update
+      sudo apt-get install -y build-essential pkg-config nasm zip ccache patchelf
+      case "$TARGET_ARCH" in
+        x86)   sudo apt-get install -y gcc-i686-linux-gnu g++-i686-linux-gnu binutils-i686-linux-gnu ;;
+        armv7) sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf binutils-arm-linux-gnueabihf ;;
+      esac
+    fi
+    ;;
 
-    # Install cross-compilation toolchain when targeting a non-native architecture
-    case "$TARGET_ARCH" in
-      x86)
-        sudo apt-get install -y gcc-i686-linux-gnu g++-i686-linux-gnu binutils-i686-linux-gnu
-        ;;
-      armv7)
-        sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf binutils-arm-linux-gnueabihf
-        ;;
-      arm64 | x86_64)
-        # Native build — no extra toolchain needed
-        ;;
-    esac
-    ;;
   macos)
-    HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install nasm pkg-config ccache
+    HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 \
+      brew install nasm pkg-config ccache meson ninja automake autoconf libtool
     ;;
+
   windows)
-    # MSYS2 packages are installed by the msys2/setup-msys2 step in the workflow.
+    sudo apt-get update
+    sudo apt-get install -y nasm pkg-config ccache zip unzip automake autoconf libtool cmake pipx
+    install_python_build_tools
+
+    toolchain_root="${RUNNER_TOOL_CACHE:-/opt}/llvm-mingw-$LLVM_MINGW_VERSION"
+    if [[ ! -x "$toolchain_root/bin/clang" ]]; then
+      archive="${RUNNER_TEMP:-/tmp}/llvm-mingw.tar.xz"
+      curl -fsSL --retry 3 -o "$archive" \
+        "https://github.com/mstorsjo/llvm-mingw/releases/download/${LLVM_MINGW_VERSION}/llvm-mingw-${LLVM_MINGW_VERSION}-ucrt-ubuntu-22.04-x86_64.tar.xz"
+      echo "${LLVM_MINGW_SHA256}  ${archive}" | sha256sum -c - >/dev/null || fail "llvm-mingw checksum mismatch"
+      mkdir -p "$toolchain_root"
+      tar -xf "$archive" -C "$toolchain_root" --strip-components=1
+    fi
+    export_env LLVM_MINGW "$toolchain_root"
     ;;
+
   *)
     fail "Unsupported target platform: $TARGET_PLATFORM"
     ;;
