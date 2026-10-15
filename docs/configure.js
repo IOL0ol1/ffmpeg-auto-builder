@@ -1,4 +1,5 @@
-// Visual model of FFmpeg configure options.
+// Visual model of FFmpeg configure options. Display texts live in i18n.js, keyed by the
+// ids used here (segment.*, option.*, toggleGroup.*, toggle.*, component.*, reason.*, note.*).
 // The build runners install no third-party libraries, so every option here only uses
 // features built into FFmpeg itself. Invalid combinations are made unselectable in the
 // UI (disabled options, linked dependencies) instead of being validated after the fact.
@@ -7,43 +8,30 @@
 export const SEGMENTS = [
   {
     id: 'buildType',
-    label: '构建类型',
     default: 'release',
     options: [
-      { id: 'release', label: 'Release', hint: '完整优化，不含调试信息，体积最小。', flags: ['--disable-debug'] },
-      {
-        id: 'relwithdebinfo',
-        label: 'RelWithDebInfo',
-        hint: '完整优化并保留调试符号，便于分析崩溃堆栈。',
-        flags: ['--disable-stripping'],
-      },
-      {
-        id: 'debug',
-        label: 'Debug',
-        hint: '降低优化级别并保留完整调试信息，适合单步调试（FFmpeg 不支持 -O0，仍保留最低限度优化）。',
-        flags: ['--enable-debug=3', '--disable-optimizations', '--disable-stripping'],
-      },
+      { id: 'release', flags: ['--disable-debug'] },
+      { id: 'relwithdebinfo', flags: ['--disable-stripping'] },
+      { id: 'debug', flags: ['--enable-debug=3', '--disable-optimizations', '--disable-stripping'] },
     ],
   },
   {
     id: 'linkage',
-    label: '链接方式',
     default: 'static',
     options: [
-      { id: 'static', label: '静态', hint: '生成静态库，ffmpeg / ffprobe 为独立的单文件程序。', flags: ['--enable-static', '--disable-shared'] },
-      { id: 'shared', label: '共享', hint: '生成 .so / .dylib / .dll 共享库，程序依赖同目录下的库文件。', flags: ['--enable-shared', '--disable-static'] },
-      { id: 'both', label: '静态 + 共享', hint: '同时生成静态库和共享库。', flags: ['--enable-static', '--enable-shared'] },
+      { id: 'static', flags: ['--enable-static', '--disable-shared'] },
+      { id: 'shared', flags: ['--enable-shared', '--disable-static'] },
+      { id: 'both', flags: ['--enable-static', '--enable-shared'] },
     ],
   },
   {
     // No built-in component requires version3; it only matters for third-party libraries,
     // so GPL v3 is not offered (--enable-version3 can still be added as a custom flag).
     id: 'license',
-    label: '许可证',
     default: 'gpl',
     options: [
-      { id: 'lgpl', label: 'LGPL', hint: 'LGPL v2.1+，可闭源动态链接；仅限 GPL 的组件不可选。', flags: [] },
-      { id: 'gpl', label: 'GPL', hint: 'GPL v2+，可用仅限 GPL 的组件，衍生程序需开源。', flags: ['--enable-gpl'] },
+      { id: 'lgpl', flags: [] },
+      { id: 'gpl', flags: ['--enable-gpl'] },
     ],
   },
 ];
@@ -53,27 +41,25 @@ export const SEGMENTS = [
 export const TOGGLE_GROUPS = [
   {
     id: 'programs',
-    label: '程序与库',
     items: [
-      { id: 'ffmpeg', label: 'ffmpeg', hint: '转码命令行程序（依赖 libavfilter）', default: true, off: ['--disable-ffmpeg'], requires: ['avfilter'] },
-      { id: 'ffprobe', label: 'ffprobe', hint: '媒体信息分析程序', default: true, off: ['--disable-ffprobe'] },
-      { id: 'avdevice', label: 'libavdevice', hint: '采集 / 播放设备（摄像头、屏幕等）', default: true, off: ['--disable-avdevice'] },
-      { id: 'avfilter', label: 'libavfilter', hint: '音视频滤镜', default: true, off: ['--disable-avfilter'] },
-      { id: 'swscale', label: 'libswscale', hint: '图像缩放与像素格式转换', default: true, off: ['--disable-swscale'] },
-      { id: 'swresample', label: 'libswresample', hint: '音频重采样与格式转换', default: true, off: ['--disable-swresample'] },
-      { id: 'doc', label: '文档 / man 页', hint: '生成 HTML 文档与 man 页，会增加编译时间', default: false, off: ['--disable-doc'] },
+      { id: 'ffmpeg', default: true, off: ['--disable-ffmpeg'], requires: ['avfilter'] },
+      { id: 'ffprobe', default: true, off: ['--disable-ffprobe'] },
+      { id: 'avdevice', default: true, off: ['--disable-avdevice'] },
+      { id: 'avfilter', default: true, off: ['--disable-avfilter'] },
+      { id: 'swscale', default: true, off: ['--disable-swscale'] },
+      { id: 'swresample', default: true, off: ['--disable-swresample'] },
+      { id: 'doc', default: false, off: ['--disable-doc'] },
     ],
   },
   {
     id: 'features',
-    label: '功能特性',
     items: [
-      { id: 'asm', label: '汇编优化', hint: 'SIMD 汇编加速；关闭后便于调试但明显变慢', default: true, off: ['--disable-asm'] },
-      { id: 'hwaccel', label: '硬件加速', hint: '自动启用平台可用的硬件解码（VideoToolbox、D3D11VA、DXVA2 等）', default: true, off: ['--disable-hwaccels'] },
-      { id: 'network', label: '网络协议', hint: 'http、rtmp、tcp、udp 等网络协议', default: true, off: ['--disable-network'] },
-      { id: 'autodetect', label: '自动探测系统库', hint: '自动启用系统中可用的库；关闭后产物依赖更少、更可移植', default: true, off: ['--disable-autodetect'] },
-      { id: 'small', label: '体积优化 (-Os)', hint: '以体积为目标优化，速度略慢', default: false, on: ['--enable-small'] },
-      { id: 'pic', label: '位置无关代码 (PIC)', hint: '静态库需要链接进其它共享库时开启', default: false, on: ['--enable-pic'] },
+      { id: 'asm', default: true, off: ['--disable-asm'] },
+      { id: 'hwaccel', default: true, off: ['--disable-hwaccels'] },
+      { id: 'network', default: true, off: ['--disable-network'] },
+      { id: 'autodetect', default: true, off: ['--disable-autodetect'] },
+      { id: 'small', default: false, on: ['--enable-small'] },
+      { id: 'pic', default: false, on: ['--enable-pic'] },
     ],
   },
 ];
@@ -88,53 +74,45 @@ const toggleById = (id) => TOGGLES.find((item) => item.id === id);
 export const COMPONENT_GROUPS = [
   {
     id: 'decoder',
-    label: '解码器',
     items: ['h264', 'hevc', 'vp8', 'vp9', 'mpeg4', 'mpeg2video', 'mjpeg', 'png', 'gif', 'aac', 'mp3', 'opus', 'vorbis', 'flac', 'alac', 'ac3', 'pcm_s16le'],
     defaults: ['h264', 'hevc', 'vp9', 'aac', 'mp3', 'opus', 'flac', 'pcm_s16le'],
   },
   {
     id: 'encoder',
-    label: '编码器',
     items: ['mpeg4', 'mjpeg', 'png', 'gif', 'ffv1', 'aac', 'flac', 'ac3', 'opus', 'pcm_s16le'],
     defaults: ['aac', 'pcm_s16le'],
   },
   {
     id: 'demuxer',
-    label: '解封装（输入格式）',
     items: ['mov', 'matroska', 'mpegts', 'flv', 'avi', 'mp3', 'aac', 'ogg', 'flac', 'wav', 'hls', 'image2', 'gif', 'concat'],
     defaults: ['mov', 'matroska', 'mpegts', 'mp3', 'aac', 'ogg', 'flac', 'wav'],
   },
   {
     id: 'muxer',
-    label: '封装（输出格式）',
     items: ['mp4', 'mov', 'matroska', 'webm', 'mpegts', 'flv', 'hls', 'segment', 'mp3', 'adts', 'ogg', 'flac', 'wav', 'image2', 'gif'],
     defaults: ['mp4', 'matroska', 'mpegts', 'adts', 'wav'],
   },
   {
     id: 'parser',
-    label: '解析器',
     items: ['h264', 'hevc', 'vp8', 'vp9', 'av1', 'mpeg4video', 'mjpeg', 'png', 'aac', 'mpegaudio', 'opus', 'vorbis', 'flac', 'ac3'],
     defaults: ['h264', 'hevc', 'vp9', 'aac', 'mpegaudio', 'opus', 'flac'],
   },
   {
     id: 'bsf',
-    label: '比特流滤镜',
     items: ['h264_mp4toannexb', 'hevc_mp4toannexb', 'aac_adtstoasc', 'extract_extradata', 'vp9_superframe'],
     defaults: ['h264_mp4toannexb', 'hevc_mp4toannexb', 'aac_adtstoasc'],
   },
   {
     id: 'protocol',
-    label: '协议',
     items: ['file', 'pipe', 'data', 'concat', 'crypto', 'http', 'https', 'tcp', 'udp', 'rtmp', 'hls'],
     defaults: ['file', 'pipe'],
     locked: ['file'],
     rules: {
-      https: { platforms: ['macos', 'windows'], reason: 'Linux 编译环境没有 TLS 库，仅 macOS / Windows 可用' },
+      https: { platforms: ['macos', 'windows'], reason: 'tls' },
     },
   },
   {
     id: 'filter',
-    label: '滤镜',
     items: ['scale', 'format', 'null', 'copy', 'crop', 'pad', 'transpose', 'hflip', 'vflip', 'fps', 'setpts', 'trim', 'overlay',
       'hqdn3d', 'delogo', 'eq', 'cropdetect', 'mpdecimate',
       'anull', 'acopy', 'aformat', 'aresample', 'volume', 'asetpts', 'atrim', 'amix', 'concat'],
@@ -198,17 +176,18 @@ export function normalizeConfig(raw) {
 // ── Availability ─────────────────────────────────────────────────────────────
 
 // context: { platform } — the selected target platform ("all" allows everything).
+// `reason` is a code translated by the page as reason.<code>.
 export function componentStatus(config, context, groupId, name) {
   const group = componentGroup(groupId);
   if (group.locked?.includes(name)) {
-    return { available: true, locked: true, reason: '精简模式下必须保留' };
+    return { available: true, locked: true, reason: 'locked' };
   }
   const rule = group.rules?.[name];
   if (rule?.gpl && config.license !== 'gpl') {
-    return { available: false, reason: '仅限 GPL：需要把许可证切换为 GPL' };
+    return { available: false, reason: 'gpl' };
   }
   if (rule?.needs && !config.toggles[rule.needs]) {
-    return { available: false, reason: `需要开启 ${toggleById(rule.needs).label}` };
+    return { available: false, reason: 'needs', needs: rule.needs };
   }
   if (rule?.platforms && context.platform && context.platform !== 'all' && !rule.platforms.includes(context.platform)) {
     return { available: false, reason: rule.reason };
@@ -286,10 +265,10 @@ export function buildConfigure(config, context = {}) {
   ]);
 
   const notes = [];
-  if (!config.toggles.ffmpeg && !config.toggles.ffprobe) notes.push('未选择任何程序，将只生成库和头文件。');
+  if (!config.toggles.ffmpeg && !config.toggles.ffprobe) notes.push('noPrograms');
   if (config.componentMode === 'slim'
     && !effectiveComponents(config, context, 'decoder').length && !effectiveComponents(config, context, 'encoder').length) {
-    notes.push('未选择任何编解码器，只能做封装格式转换。');
+    notes.push('noCodecs');
   }
   return { options: tokens.join(' '), tokens, notes };
 }

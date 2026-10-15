@@ -83,9 +83,18 @@ jobs:
       release_tag: ${{ steps.params.outputs.release_tag }}
       matrix: ${{ steps.params.outputs.matrix }}
       needs_lipo: ${{ steps.params.outputs.needs_lipo }}
+      lang: ${{ steps.lang.outputs.lang }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      # Replies on the issue use the language of the issue form the page prefilled.
+      - name: Detect issue language
+        id: lang
+        shell: bash
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: echo "lang=$(python3 -I scripts/parse-issue.py --lang)" >> "$GITHUB_OUTPUT"
 
       - name: Resolve build parameters
         id: params
@@ -93,6 +102,7 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_LANG: ${{ steps.lang.outputs.lang }}
           INPUT_SOURCE_REPOSITORY: ${{ inputs.source_repository }}
           INPUT_SOURCE_REF: ${{ inputs.source_ref }}
           INPUT_TARGET_PLATFORM: ${{ inputs.target_platform }}
@@ -108,49 +118,22 @@ jobs:
       - name: Report invalid request
         if: failure() && github.event_name == 'issues'
         shell: bash
-        run: |
-          {
-            echo "❌ 参数校验失败，未开始编译。"
-            echo
-            echo '```text'
-            cat "$RUNNER_TEMP/resolve-error.log" 2>/dev/null || true
-            echo '```'
-            echo
-            echo "运行日志：$RUN_URL"
-            echo
-            echo "请修正参数后重新提交一个新的 Issue。"
-          } > "$RUNNER_TEMP/comment.md"
-          gh issue comment "$ISSUE_NUMBER" --body-file "$RUNNER_TEMP/comment.md"
-          gh issue close "$ISSUE_NUMBER" --reason "not planned"
+        env:
+          ISSUE_LANG: ${{ steps.lang.outputs.lang }}
+        run: ./scripts/issue-comment.sh invalid "$RUNNER_TEMP/resolve-error.log"
 
       - name: Acknowledge request
         if: github.event_name == 'issues'
         shell: bash
         env:
+          ISSUE_LANG: ${{ steps.lang.outputs.lang }}
           SOURCE_REPOSITORY: ${{ steps.params.outputs.source_repository }}
           SOURCE_REF: ${{ steps.params.outputs.source_ref }}
           TARGET: ${{ steps.params.outputs.target_platform }}/${{ steps.params.outputs.target_arch }}
           PACKAGE_FORMAT: ${{ steps.params.outputs.package_format }}
           CONFIGURE_OPTIONS: ${{ steps.params.outputs.configure_options }}
           RELEASE_TAG: ${{ steps.params.outputs.release_tag }}
-        run: |
-          gh label create build --color 0969da --description "FFmpeg build request" >/dev/null 2>&1 || true
-          gh issue edit "$ISSUE_NUMBER" --add-label build >/dev/null 2>&1 || true
-          {
-            echo "🚀 已开始编译，完成后会在这里回复下载链接。"
-            echo
-            echo "| 参数 | 值 |"
-            echo "|---|---|"
-            echo "| 源码 | $SOURCE_REPOSITORY |"
-            echo "| ref | ${SOURCE_REF:-（默认分支）} |"
-            echo "| 目标 | \`$TARGET\` |"
-            echo "| 打包格式 | \`$PACKAGE_FORMAT\` |"
-            echo "| Release tag | \`$RELEASE_TAG\` |"
-            echo "| configure | \`$CONFIGURE_OPTIONS\` |"
-            echo
-            echo "运行进度：$RUN_URL"
-          } > "$RUNNER_TEMP/comment.md"
-          gh issue comment "$ISSUE_NUMBER" --body-file "$RUNNER_TEMP/comment.md"
+        run: ./scripts/issue-comment.sh started
 
   build:
     name: build ${{ matrix.platform }}/${{ matrix.arch }}
@@ -285,7 +268,11 @@ jobs:
       SOURCE_REF: ${{ needs.setup.outputs.source_ref }}
       TARGET: ${{ needs.setup.outputs.target_platform }}/${{ needs.setup.outputs.target_arch }}
       CONFIGURE_OPTIONS: ${{ needs.setup.outputs.configure_options }}
+      ISSUE_LANG: ${{ needs.setup.outputs.lang }}
     steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
@@ -328,35 +315,4 @@ jobs:
         env:
           PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
           RELEASE_URL: ${{ steps.publish.outputs.release_url }}
-        run: |
-          jobs_json="$(gh api "repos/$GH_REPO/actions/runs/$GITHUB_RUN_ID/jobs?per_page=100")"
-          job_rows="$(jq -r '.jobs[]
-            | select(.name != "setup" and (.name | startswith("release") | not))
-            | "| \(.name) | \(if .conclusion == "success" then "✅" elif .conclusion == "skipped" then "⏭" else "❌" end) \(.conclusion // .status) |"' <<<"$jobs_json")"
-          failed_count="$(jq '[.jobs[] | select(.name != "setup" and (.name | startswith("release") | not))
-            | select(.conclusion != "success" and .conclusion != "skipped")] | length' <<<"$jobs_json")"
-
-          {
-            if [[ "$PUBLISH_OUTCOME" == "success" && "$failed_count" -eq 0 ]]; then
-              echo "✅ 编译完成。"
-            elif [[ "$PUBLISH_OUTCOME" == "success" ]]; then
-              echo "⚠️ 部分目标编译失败，成功的产物已发布。"
-            else
-              echo "❌ 编译失败，没有可发布的产物。"
-            fi
-            echo
-            if [[ -n "$RELEASE_URL" ]]; then
-              echo "- Draft Release（含 \`SHA256SUMS.txt\`）：$RELEASE_URL"
-              echo "  草稿仅仓库所有者和协作者可见，确认无误后可在 Release 页面点击 Publish 公开发布。"
-            fi
-            echo "- 运行详情与 Artifact：$RUN_URL"
-            echo
-            echo "| 任务 | 结果 |"
-            echo "|---|---|"
-            echo "$job_rows"
-          } > "$RUNNER_TEMP/comment.md"
-          gh issue comment "$ISSUE_NUMBER" --body-file "$RUNNER_TEMP/comment.md"
-
-          if [[ "$PUBLISH_OUTCOME" == "success" ]]; then
-            gh issue close "$ISSUE_NUMBER" --reason completed
-          fi
+        run: ./scripts/issue-comment.sh result

@@ -3,8 +3,12 @@ import {
   buildConfigure, componentStatus, defaultConfig, effectiveComponents, normalizeConfig,
   requiresGpl, sanitizeCustom, setToggle,
 } from './configure.js';
+import {
+  LANGUAGES, detectLanguage, getLanguage, setLanguage, t, translateStatic,
+} from './i18n.js';
 
 const form = document.querySelector('#build-form');
+const langSelect = document.querySelector('#lang-select');
 const segmentsNode = document.querySelector('#segments');
 const toggleGroupsNode = document.querySelector('#toggle-groups');
 const componentModeNode = document.querySelector('#component-mode');
@@ -25,18 +29,24 @@ const targetPlatformSelect = document.querySelector('#target-platform');
 const targetArchSelect = document.querySelector('#target-arch');
 
 const BUILD_TITLE_PREFIX = '[build]';
-const ISSUE_TEMPLATE = 'build.yml';
 // Unauthenticated GitHub API calls are limited to 60/hour per IP; each refresh costs two.
 const AUTO_REFRESH_MS = 10 * 60 * 1000;
 const SAFE_REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/;
 const REPOSITORY_PATTERN = /^(https?:\/\/github\.com\/|git@github\.com:)[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+?(\.git)?\/?$/;
 const CONFIG_STORAGE_KEY = 'ffmpeg-builder-config-v2';
 
+// Dynamic content keeps its data (not rendered text) so a language switch can re-render it.
 const state = {
   owner: '',
   repo: '',
   refreshHandle: null,
   config: defaultConfig(),
+  repoInfo: { status: 'pending' },
+  builds: null,
+  buildsError: null,
+  toggleNotice: null,
+  submittedUrl: '',
+  formError: null,
 };
 
 // ── Repository detection ────────────────────────────────────────────────────
@@ -65,28 +75,29 @@ function repoUrl(path = '') {
 
 // ── GitHub API helper (unauthenticated, public data only) ──────────────────
 
+// Errors carry a translation key so their message follows the page language.
+function apiError(key, vars = {}) {
+  const error = new Error(key);
+  error.i18n = { key, vars };
+  return error;
+}
+
+function errorText(error) {
+  return error.i18n ? t(error.i18n.key, error.i18n.vars) : error.message;
+}
+
 async function githubFetch(path) {
   const response = await fetch(`https://api.github.com${path}`, {
     headers: { Accept: 'application/vnd.github+json' },
   });
 
   if (!response.ok) {
-    if (response.status === 403 || response.status === 429) {
-      throw new Error('GitHub API 访问次数已达上限（未登录时每小时 60 次），请稍后再刷新。');
-    }
-    if (response.status === 404) {
-      throw new Error('无法读取仓库信息：仓库不存在或为私有仓库。私有仓库请直接在 GitHub 上查看 Issues 与 Actions。');
-    }
-    const payload = await response.json().catch(() => ({}));
-    throw new Error(payload.message || `GitHub API 请求失败: ${response.status}`);
+    if (response.status === 403 || response.status === 429) throw apiError('api.rateLimit');
+    if (response.status === 404) throw apiError('api.notFound');
+    throw apiError('api.failed', { status: response.status });
   }
 
   return response.json();
-}
-
-function setMessage(node, type, message) {
-  node.className = `${node.dataset.baseClass} ${type}`.trim();
-  node.textContent = message;
 }
 
 function makeLink(href, text) {
@@ -100,54 +111,70 @@ function makeLink(href, text) {
 
 async function loadRepositoryInfo() {
   if (!state.owner || !state.repo) {
-    detectedRepoNode.textContent = '无法自动识别，请以 https://<owner>.github.io/<repo>/ 形式访问';
-    issuesStatusNode.textContent = '未知';
+    state.repoInfo = { status: 'undetected' };
+    renderRepositoryInfo();
+    return;
+  }
+
+  try {
+    const repo = await githubFetch(`/repos/${state.owner}/${state.repo}`);
+    state.repoInfo = { status: repo.has_issues ? 'enabled' : 'disabled' };
+  } catch (error) {
+    state.repoInfo = { status: 'error', error };
+  }
+  renderRepositoryInfo();
+}
+
+function renderRepositoryInfo() {
+  const { status, error } = state.repoInfo;
+  if (status === 'undetected') {
+    detectedRepoNode.textContent = t('repo.undetected');
+    issuesStatusNode.textContent = t('common.unknown');
     return;
   }
 
   detectedRepoNode.replaceChildren(makeLink(repoUrl(), `${state.owner}/${state.repo}`));
-
-  try {
-    const repo = await githubFetch(`/repos/${state.owner}/${state.repo}`);
-    if (repo.has_issues) {
-      issuesStatusNode.textContent = '已开启';
-    } else {
-      issuesStatusNode.replaceChildren(
-        '未开启，无法提交编译。请到 ',
-        makeLink(repoUrl('/settings'), 'Settings → General → Features'),
-        ' 勾选 Issues。',
-      );
-    }
-  } catch (error) {
-    issuesStatusNode.textContent = error.message;
+  if (status === 'pending') {
+    issuesStatusNode.textContent = t('common.detecting');
+  } else if (status === 'enabled') {
+    issuesStatusNode.textContent = t('issues.enabled');
+  } else if (status === 'disabled') {
+    issuesStatusNode.replaceChildren(
+      t('issues.disabled.before'),
+      makeLink(repoUrl('/settings'), 'Settings → General → Features'),
+      t('issues.disabled.after'),
+    );
+  } else {
+    issuesStatusNode.textContent = errorText(error);
   }
 }
 
 // ── Form helpers ────────────────────────────────────────────────────────────
 
-const ARCH_OPTIONS = {
-  linux:   [['x86_64', 'x86_64'], ['x86', 'x86 (32-bit)'], ['arm64', 'arm64 (AArch64)'], ['armv7', 'armv7 (ARM 32-bit)']],
-  macos:   [['x86_64', 'x86_64 (Intel)'], ['arm64', 'arm64 (Apple Silicon)'], ['universal', 'Universal (fat binary)']],
-  windows: [['x86_64', 'x86_64'], ['x86', 'x86 (32-bit，实验性)'], ['arm64', 'arm64 (AArch64)']],
-  all:     [['x86_64', 'x86_64'], ['arm64', 'arm64'], ['universal', 'Universal (macOS fat + x86_64 others)']],
-};
+// Labels are technical names except the few that need translation.
+function archOptions(platform) {
+  return {
+    linux: [['x86_64', 'x86_64'], ['x86', 'x86 (32-bit)'], ['arm64', 'arm64 (AArch64)'], ['armv7', 'armv7 (ARM 32-bit)']],
+    macos: [['x86_64', 'x86_64 (Intel)'], ['arm64', 'arm64 (Apple Silicon)'], ['universal', 'Universal (fat binary)']],
+    windows: [['x86_64', 'x86_64'], ['x86', t('arch.x86.experimental')], ['arm64', 'arm64 (AArch64)']],
+    all: [['x86_64', 'x86_64'], ['arm64', 'arm64'], ['universal', t('arch.universal.all')]],
+  }[platform] || [];
+}
 
 function updateArchOptions() {
-  const options = ARCH_OPTIONS[targetPlatformSelect.value] || ARCH_OPTIONS.linux;
   const current = targetArchSelect.value;
-  targetArchSelect.innerHTML = '';
-  options.forEach(([value, label]) => {
+  targetArchSelect.replaceChildren(...archOptions(targetPlatformSelect.value).map(([value, label]) => {
     const opt = document.createElement('option');
     opt.value = value;
     opt.textContent = label;
-    if (value === current) opt.selected = true;
-    targetArchSelect.appendChild(opt);
-  });
+    opt.selected = value === current;
+    return opt;
+  }));
 }
 
 // ── configure option builder ────────────────────────────────────────────────
 
-// The controls are rendered once from the model in configure.js; every change updates
+// The controls are rendered from the model in configure.js; every change updates
 // state.config and syncConfigUI() reflects it back into the DOM. Invalid choices are made
 // unavailable in the controls themselves instead of being validated afterwards.
 
@@ -178,7 +205,7 @@ function makeSegmented(container, options, onSelect) {
     button.setAttribute('role', 'radio');
     button.dataset.value = option.id;
     button.textContent = option.label;
-    if (option.flags) button.title = option.flags.join(' ') || '（不添加参数）';
+    if (option.flags) button.title = option.flags.join(' ') || t('config.noFlags');
     button.addEventListener('click', () => onSelect(option.id));
     return button;
   }));
@@ -202,16 +229,11 @@ function makeChip(text, onChange) {
   return label;
 }
 
-// Briefly highlight controls changed indirectly (dependencies, custom flags).
+// Briefly highlight controls changed indirectly by a dependency.
 function flashControls(keys) {
   keys.forEach((key) => {
     const [kind, id] = key.split(':');
-    const node = {
-      segment: () => segmentsNode.querySelector(`[data-segment="${id}"]`),
-      toggle: () => toggleGroupsNode.querySelector(`[data-toggle="${id}"]`),
-      group: () => componentGroupsNode.querySelector(`[data-group="${id}"]`),
-      components: () => componentModeNode,
-    }[kind]?.();
+    const node = kind === 'toggle' ? toggleGroupsNode.querySelector(`[data-toggle="${id}"]`) : null;
     if (!node) return;
     node.classList.remove('flash');
     void node.offsetWidth; // restart the animation
@@ -223,13 +245,19 @@ function setToggleFromUI(item, checked) {
   const result = setToggle(state.config, item.id, checked);
   updateConfig(result.config);
   const others = result.changed.filter((id) => id !== item.id);
-  const labels = others.map((id) => TOGGLE_GROUPS.flatMap((group) => group.items).find((entry) => entry.id === id).label);
-  toggleNoticeNode.textContent = others.length
-    ? (checked
-      ? `已同时开启 ${labels.join('、')}（${item.label} 依赖它）。`
-      : `已同时关闭 ${labels.join('、')}（依赖 ${item.label}）。`)
-    : '';
+  state.toggleNotice = others.length ? { item: item.id, others, checked } : null;
+  renderToggleNotice();
   flashControls(others.map((id) => `toggle:${id}`));
+}
+
+function renderToggleNotice() {
+  const notice = state.toggleNotice;
+  toggleNoticeNode.textContent = notice
+    ? t(notice.checked ? 'notice.linkedOn' : 'notice.linkedOff', {
+      labels: notice.others.map((id) => t(`toggle.${id}`)).join(t('common.listSep')),
+      item: t(`toggle.${notice.item}`),
+    })
+    : '';
 }
 
 function renderConfigControls() {
@@ -238,13 +266,17 @@ function renderConfigControls() {
     group.className = 'choice-group';
     const title = document.createElement('span');
     title.className = 'group-title';
-    title.textContent = segment.label;
+    title.textContent = t(`segment.${segment.id}`);
     const control = document.createElement('div');
     control.className = 'segmented';
     control.setAttribute('role', 'radiogroup');
-    control.setAttribute('aria-label', segment.label);
+    control.setAttribute('aria-label', t(`segment.${segment.id}`));
     control.dataset.segment = segment.id;
-    makeSegmented(control, segment.options, (value) => updateConfig({ [segment.id]: value }));
+    makeSegmented(
+      control,
+      segment.options.map((option) => ({ ...option, label: t(`option.${segment.id}.${option.id}`) })),
+      (value) => updateConfig({ [segment.id]: value }),
+    );
     const hint = document.createElement('small');
     hint.className = 'muted';
     hint.dataset.hintFor = segment.id;
@@ -257,13 +289,13 @@ function renderConfigControls() {
     wrapper.className = 'choice-group';
     const title = document.createElement('span');
     title.className = 'group-title';
-    title.textContent = group.label;
+    title.textContent = t(`toggleGroup.${group.id}`);
     const chips = document.createElement('div');
     chips.className = 'choices chips';
     group.items.forEach((item) => {
-      const chip = makeChip(item.label, (checked) => setToggleFromUI(item, checked));
+      const chip = makeChip(t(`toggle.${item.id}`), (checked) => setToggleFromUI(item, checked));
       chip.dataset.toggle = item.id;
-      chip.title = `${item.hint}\n${[...(item.on || []), ...(item.off || [])].join(' / ')}`;
+      chip.title = `${t(`toggle.${item.id}.hint`)}\n${[...(item.on || []), ...(item.off || [])].join(' / ')}`;
       chips.appendChild(chip);
     });
     wrapper.append(title, chips);
@@ -271,17 +303,20 @@ function renderConfigControls() {
   }));
 
   makeSegmented(componentModeNode, [
-    { id: 'all', label: '全部组件' },
-    { id: 'slim', label: '精简' },
+    { id: 'all', label: t('mode.all') },
+    { id: 'slim', label: t('mode.slim') },
   ], (value) => updateConfig({ componentMode: value }));
 
+  // Keep expanded component groups open when re-rendering for a language switch.
+  const openGroups = new Set([...componentGroupsNode.querySelectorAll('details[open]')].map((node) => node.dataset.group));
   componentGroupsNode.replaceChildren(...COMPONENT_GROUPS.map((group) => {
     const details = document.createElement('details');
     details.className = 'component-group';
     details.dataset.group = group.id;
+    details.open = openGroups.has(group.id);
     const summary = document.createElement('summary');
     const name = document.createElement('span');
-    name.textContent = group.label;
+    name.textContent = t(`component.${group.id}`);
     const count = document.createElement('span');
     count.className = 'muted count';
     summary.append(name, count);
@@ -291,12 +326,12 @@ function renderConfigControls() {
     };
     const tools = document.createElement('div');
     tools.className = 'component-tools';
-    [['全选', () => setSelection([...group.items])], ['清空', () => setSelection([])], ['常用', () => setSelection([...group.defaults])]]
-      .forEach(([text, action]) => {
+    [['tools.all', () => setSelection([...group.items])], ['tools.none', () => setSelection([])], ['tools.defaults', () => setSelection([...group.defaults])]]
+      .forEach(([key, action]) => {
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'secondary small';
-        button.textContent = text;
+        button.textContent = t(key);
         button.addEventListener('click', action);
         tools.appendChild(button);
       });
@@ -324,14 +359,17 @@ function renderConfigControls() {
   }));
 }
 
+function statusReason(status) {
+  return status.reason ? t(`reason.${status.reason}`, { lib: status.needs ? t(`toggle.${status.needs}`) : '' }) : '';
+}
+
 function syncConfigUI() {
   const { config } = state;
   const context = configContext();
 
   SEGMENTS.forEach((segment) => {
     syncSegmented(segmentsNode.querySelector(`[data-segment="${segment.id}"]`), config[segment.id]);
-    const option = segment.options.find((item) => item.id === config[segment.id]);
-    segmentsNode.querySelector(`[data-hint-for="${segment.id}"]`).textContent = option?.hint || '';
+    segmentsNode.querySelector(`[data-hint-for="${segment.id}"]`).textContent = t(`option.${segment.id}.${config[segment.id]}.hint`);
   });
 
   toggleGroupsNode.querySelectorAll('[data-toggle]').forEach((chip) => {
@@ -340,9 +378,7 @@ function syncConfigUI() {
 
   syncSegmented(componentModeNode, config.componentMode);
   const slim = config.componentMode === 'slim';
-  componentModeHintNode.textContent = slim
-    ? '先禁用全部组件（--disable-everything），只编译下面勾选的项目，体积最小。灰色项目当前不可用，悬停查看原因。'
-    : '编译 FFmpeg 自带的全部编解码器、封装格式、协议与滤镜。';
+  componentModeHintNode.textContent = t(slim ? 'mode.slim.hint' : 'mode.all.hint');
   componentGroupsNode.hidden = !slim;
   COMPONENT_GROUPS.forEach((group) => {
     const node = componentGroupsNode.querySelector(`[data-group="${group.id}"]`);
@@ -356,7 +392,7 @@ function syncConfigUI() {
       input.disabled = !status.available || Boolean(status.locked);
       chip.classList.toggle('unavailable', !status.available);
       chip.classList.toggle('locked', Boolean(status.locked));
-      chip.title = status.reason || `--enable-${group.id}=${name}`;
+      chip.title = statusReason(status) || `--enable-${group.id}=${name}`;
     });
   });
 
@@ -369,7 +405,7 @@ function syncConfigUI() {
   configNotesNode.replaceChildren(...notes.map((note) => {
     const li = document.createElement('li');
     li.className = 'muted';
-    li.textContent = note;
+    li.textContent = t(`note.${note}`);
     return li;
   }));
 }
@@ -383,12 +419,14 @@ function updateConfig(patch) {
 async function copyConfigure() {
   try {
     await navigator.clipboard.writeText(configurePreviewNode.textContent);
-    copyConfigButton.textContent = '已复制';
+    copyConfigButton.textContent = t('config.copied');
   } catch {
-    copyConfigButton.textContent = '复制失败';
+    copyConfigButton.textContent = t('config.copyFailed');
   }
-  window.setTimeout(() => { copyConfigButton.textContent = '复制'; }, 1500);
+  window.setTimeout(() => { copyConfigButton.textContent = t('config.copy'); }, 1500);
 }
+
+// ── Submit ──────────────────────────────────────────────────────────────────
 
 function readForm() {
   const formData = new FormData(form);
@@ -405,19 +443,16 @@ function readForm() {
 
 // Mirrors scripts/resolve-params.sh so mistakes are caught before leaving the page.
 function validate(params) {
-  if (!REPOSITORY_PATTERN.test(params.sourceRepository)) {
-    return '源码仓库只支持 GitHub 地址，例如 https://github.com/FFmpeg/FFmpeg';
-  }
-  if (params.sourceRef && !SAFE_REF_PATTERN.test(params.sourceRef)) {
-    return '源码分支 / tag / commit 含有不允许的字符。';
-  }
+  if (!REPOSITORY_PATTERN.test(params.sourceRepository)) return 'validate.repo';
+  if (params.sourceRef && !SAFE_REF_PATTERN.test(params.sourceRef)) return 'validate.ref';
   return '';
 }
 
+// The issue template follows the page language; the workflow replies in the same language.
 function buildIssueUrl(params) {
   const title = `${BUILD_TITLE_PREFIX} ${params.targetPlatform}/${params.targetArch} ${params.sourceRef || 'HEAD'}`;
   const query = new URLSearchParams({
-    template: ISSUE_TEMPLATE,
+    template: getLanguage().issueTemplate,
     title,
     source_repository: params.sourceRepository,
     source_ref: params.sourceRef,
@@ -429,40 +464,49 @@ function buildIssueUrl(params) {
   return repoUrl(`/issues/new?${query}`);
 }
 
+function renderFormMessage() {
+  formMessageNode.className = 'form-message';
+  if (state.formError) {
+    formMessageNode.classList.add('status-error');
+    formMessageNode.textContent = t(state.formError);
+  } else if (state.submittedUrl) {
+    formMessageNode.classList.add('status-warn');
+    formMessageNode.replaceChildren(
+      t('submit.opened.before'),
+      makeLink(state.submittedUrl, t('submit.opened.link')),
+      t('submit.opened.after'),
+    );
+  } else {
+    formMessageNode.textContent = '';
+  }
+}
+
 function handleSubmit(event) {
   event.preventDefault();
+  state.submittedUrl = '';
+  state.formError = null;
 
   if (!state.owner || !state.repo) {
-    setMessage(formMessageNode, 'status-error', '无法识别当前仓库，请检查 Pages 访问地址。');
-    return;
+    state.formError = 'form.repoUnknown';
+  } else {
+    const params = readForm();
+    state.formError = validate(params) || null;
+    if (!state.formError) {
+      state.submittedUrl = buildIssueUrl(params);
+      window.open(state.submittedUrl, '_blank', 'noopener');
+    }
   }
-
-  const params = readForm();
-  const error = validate(params);
-  if (error) {
-    setMessage(formMessageNode, 'status-error', error);
-    return;
-  }
-
-  const url = buildIssueUrl(params);
-  window.open(url, '_blank', 'noopener');
-
-  formMessageNode.className = `${formMessageNode.dataset.baseClass} status-warn`;
-  formMessageNode.replaceChildren(
-    '已在新标签页打开预填好的 Issue，请在 GitHub 上点击 “Submit new issue” 提交。没有自动打开？',
-    makeLink(url, '点此打开'),
-    '。提交后可在下方“编译记录”中查看进度。',
-  );
+  renderFormMessage();
 }
 
 // ── Build records ───────────────────────────────────────────────────────────
 
 function runStatusLabel(run) {
-  if (!run) return '等待工作流启动（或提交人无权限，未执行）';
-  if (run.status !== 'completed') return run.status === 'queued' ? '排队中' : '编译中';
-  if (run.conclusion === 'success') return '已完成';
-  if (run.conclusion === 'skipped') return '未执行（标题或权限不符）';
-  return `已结束（${run.conclusion || 'unknown'}）`;
+  if (!run) return t('run.waiting');
+  if (run.status !== 'completed') return t(run.status === 'queued' ? 'run.queued' : 'run.running');
+  if (run.conclusion === 'success') return t('run.success');
+  if (run.conclusion === 'skipped') return t('run.skipped');
+  return t('run.ended', { conclusion: run.conclusion || 'unknown' });
 }
 
 function statusClass(run) {
@@ -521,25 +565,25 @@ function attachLogViewerButton(card, runId) {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'secondary log-btn';
-  btn.textContent = '展开日志摘要';
+  btn.textContent = t('log.expand');
 
   let summaryNode = null;
   btn.addEventListener('click', async () => {
     if (summaryNode) {
       summaryNode.hidden = !summaryNode.hidden;
-      btn.textContent = summaryNode.hidden ? '展开日志摘要' : '收起日志摘要';
+      btn.textContent = t(summaryNode.hidden ? 'log.expand' : 'log.collapse');
       return;
     }
 
-    btn.textContent = '加载中…';
+    btn.textContent = t('common.loading');
     btn.disabled = true;
     try {
       const payload = await githubFetch(`/repos/${state.owner}/${state.repo}/actions/runs/${runId}/jobs`);
       summaryNode = renderJobsSummary(payload.jobs || []);
       card.appendChild(summaryNode);
-      btn.textContent = '收起日志摘要';
+      btn.textContent = t('log.collapse');
     } catch (err) {
-      btn.textContent = `加载失败: ${err.message}`;
+      btn.textContent = t('log.failed', { error: errorText(err) });
     } finally {
       btn.disabled = false;
     }
@@ -556,7 +600,7 @@ function buildCard(issue, run) {
   const heading = document.createElement('h3');
   heading.textContent = `#${issue.number} · ${runStatusLabel(run)}`;
   const time = document.createElement('span');
-  time.textContent = new Date(issue.created_at).toLocaleString();
+  time.textContent = new Date(issue.created_at).toLocaleString(getLanguage().id);
   header.append(heading, time);
   card.appendChild(header);
 
@@ -566,13 +610,16 @@ function buildCard(issue, run) {
 
   const metaP = document.createElement('p');
   metaP.className = 'muted';
-  metaP.textContent = `提交人：${issue.user?.login || 'unknown'} · Issue ${issue.state === 'open' ? '未关闭' : '已关闭'}`;
+  metaP.textContent = t('card.meta', {
+    user: issue.user?.login || 'unknown',
+    state: t(issue.state === 'open' ? 'card.open' : 'card.closed'),
+  });
   card.appendChild(metaP);
 
   const linksP = document.createElement('p');
-  linksP.append(makeLink(issue.html_url, '查看 Issue（下载链接在评论中）'));
+  linksP.append(makeLink(issue.html_url, t('card.issueLink')));
   if (run) {
-    linksP.append(' · ', makeLink(run.html_url, '查看 Actions 运行'));
+    linksP.append(' · ', makeLink(run.html_url, t('card.runLink')));
   }
   card.appendChild(linksP);
 
@@ -581,6 +628,26 @@ function buildCard(issue, run) {
   }
 
   return card;
+}
+
+function renderBuilds() {
+  buildListNode.className = 'run-list';
+  if (state.buildsError) {
+    buildListNode.classList.add('empty', 'status-error');
+    buildListNode.textContent = errorText(state.buildsError);
+    return;
+  }
+  if (!state.builds) {
+    buildListNode.classList.add('empty');
+    buildListNode.textContent = t('common.loading');
+    return;
+  }
+  if (!state.builds.issues.length) {
+    buildListNode.classList.add('empty');
+    buildListNode.textContent = t('builds.empty');
+    return;
+  }
+  buildListNode.replaceChildren(...state.builds.issues.map((issue) => buildCard(issue, state.builds.runsByIssue.get(issue.number))));
 }
 
 async function refreshBuilds() {
@@ -611,17 +678,8 @@ async function refreshBuilds() {
     const builds = (issues || [])
       .filter((issue) => !issue.pull_request && issue.title.startsWith(BUILD_TITLE_PREFIX))
       .slice(0, 20);
-
-    buildListNode.className = buildListNode.dataset.baseClass;
-    buildListNode.innerHTML = '';
-    if (!builds.length) {
-      setMessage(buildListNode, 'empty', '还没有编译记录。');
-      return;
-    }
-
-    builds.forEach((issue) => {
-      buildListNode.appendChild(buildCard(issue, runsByIssue.get(issue.number)));
-    });
+    state.builds = { issues: builds, runsByIssue };
+    state.buildsError = null;
 
     const inProgress = builds.some((issue) => {
       const run = runsByIssue.get(issue.number);
@@ -631,27 +689,48 @@ async function refreshBuilds() {
       state.refreshHandle = window.setTimeout(refreshBuilds, AUTO_REFRESH_MS);
     }
   } catch (error) {
-    setMessage(buildListNode, 'empty status-error', error.message);
+    state.buildsError = error;
   } finally {
     refreshButton.disabled = false;
   }
+  renderBuilds();
+}
+
+// ── Language ────────────────────────────────────────────────────────────────
+
+function applyLanguage(id) {
+  setLanguage(id);
+  langSelect.value = getLanguage().id;
+  translateStatic();
+  updateArchOptions();
+  renderConfigControls();
+  syncConfigUI();
+  renderToggleNotice();
+  renderRepositoryInfo();
+  renderFormMessage();
+  renderBuilds();
 }
 
 // ── Init ────────────────────────────────────────────────────────────────────
 
 Object.assign(state, detectRepository());
-formMessageNode.dataset.baseClass = 'form-message';
-buildListNode.dataset.baseClass = 'run-list';
+
+langSelect.replaceChildren(...LANGUAGES.map((language) => {
+  const opt = document.createElement('option');
+  opt.value = language.id;
+  opt.textContent = language.label;
+  return opt;
+}));
+langSelect.addEventListener('change', () => applyLanguage(langSelect.value));
 
 targetPlatformSelect.addEventListener('change', () => {
   updateArchOptions();
   syncConfigUI(); // platform-specific components (e.g. https) may change availability
 });
-updateArchOptions();
 
-renderConfigControls();
 state.config = loadSavedConfig();
-syncConfigUI();
+applyLanguage(detectLanguage());
+
 customOptionsInput.addEventListener('input', () => {
   const clean = sanitizeCustom(customOptionsInput.value);
   if (clean !== customOptionsInput.value) {
@@ -665,9 +744,10 @@ customOptionsInput.addEventListener('input', () => {
 copyConfigButton.addEventListener('click', copyConfigure);
 resetConfigButton.addEventListener('click', () => {
   state.config = defaultConfig();
+  state.toggleNotice = null;
   saveConfig();
   syncConfigUI();
-  toggleNoticeNode.textContent = '';
+  renderToggleNotice();
 });
 
 form.addEventListener('submit', handleSubmit);

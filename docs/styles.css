@@ -555,3 +555,29 @@ button.small {
     box-shadow: 0 0 0 4px rgba(9, 105, 218, 0);
   }
 }
+
+.hero-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.hero-head .eyebrow {
+  margin: 0;
+}
+
+.lang-switch select {
+  width: auto;
+  padding: 6px 10px;
+  font-size: 0.9rem;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

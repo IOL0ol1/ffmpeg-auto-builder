@@ -14,6 +14,7 @@
 - ccache 增量编译、冒烟测试、统一发布一个 Draft Release（附 `SHA256SUMS.txt`）。
 - 产物可直接解压使用：共享库构建自动修正 rpath / install name，`.pc` 文件改为相对路径，Windows 包自动附带 MinGW 运行时 DLL，包内附 `BUILDINFO.txt`。
 - 网页展示最近的编译记录、运行状态和 Job/Step 日志摘要。
+- 网页支持 **简体中文 / English / 日本語** 切换（默认跟随浏览器语言），生成的 Issue 以及工作流在 Issue 中的回复都会使用同一语言。
 - 代码中不硬编码仓库名、用户名、密钥，Fork 后无需改代码即可使用。
 
 ## 目录结构
@@ -21,12 +22,13 @@
 ```text
 .
 ├── .github/
-│   ├── ISSUE_TEMPLATE/build.yml  # 编译请求的 Issue 表单
+│   ├── ISSUE_TEMPLATE/           # 编译请求的 Issue 表单（build.yml 中文 / build-en.yml / build-ja.yml）
 │   └── workflows/build.yml       # 编译流水线（setup → build matrix → lipo → release）
-├── docs/                         # GitHub Pages 前端（index.html / app.js / configure.js / styles.css）
+├── docs/                         # GitHub Pages 前端（index.html / app.js / configure.js / i18n.js / styles.css）
 └── scripts/
     ├── common.sh                 # 公共工具函数（仓库地址解析、参数过滤等）
-    ├── parse-issue.py            # 从 Issue 正文解析编译参数
+    ├── parse-issue.py            # 从 Issue 正文解析编译参数并识别语言
+    ├── issue-comment.sh          # 按 Issue 语言回复开始 / 校验失败 / 编译结果
     ├── resolve-params.sh         # 校验参数、生成 release tag 与构建矩阵
     ├── install-deps.sh           # Linux / macOS 依赖安装（apt / brew）
     ├── build-ffmpeg.sh           # 编译、修正产物路径、冒烟测试并打包
@@ -61,7 +63,7 @@
 
 ### 第 3 步：在网页上填写参数
 
-打开第 1 步得到的 Pages 地址。页面顶部会显示识别到的仓库，以及 Issues 是否已开启。按表单填写：
+打开第 1 步得到的 Pages 地址。页面顶部会显示识别到的仓库，以及 Issues 是否已开启；右上角可切换界面语言（简体中文 / English / 日本語），提交的 Issue 和工作流回复会跟随该语言。按表单填写：
 
 | 字段 | 说明 | 示例 |
 |---|---|---|
@@ -80,7 +82,7 @@
 2. 点击 **Submit new issue**。
 3. 几秒内工作流就会启动，并在 Issue 中回复 **🚀 已开始编译**，附带参数表和运行进度链接。
 
-> 也可以不经过网页：在仓库 **Issues → New issue** 中选择 **FFmpeg 编译** 模板直接填写。
+> 也可以不经过网页：在仓库 **Issues → New issue** 中选择 **FFmpeg 编译** / **FFmpeg Build** / **FFmpeg ビルド** 任一模板直接填写，工作流会用该模板的语言回复。
 
 ### 第 5 步：查看进度与下载产物
 
@@ -172,6 +174,7 @@ BUILDINFO.txt   源码仓库、ref、commit、编译器、configure 参数
 2. `issues: opened` 事件触发工作流。**setup** 任务：
    - 只处理标题以 `[build]` 开头、且提交人为仓库 `OWNER` / `MEMBER` / `COLLABORATOR` 的 Issue，其余直接跳过；
    - `scripts/parse-issue.py` 解析 Issue 正文，`scripts/resolve-params.sh` 校验平台、指令集、打包格式、源码地址、ref 与 configure 参数，生成 release tag 和构建矩阵；
+   - 根据 Issue 表单的标题文字识别语言（中文 / 英文 / 日文），之后的所有回复都使用该语言；
    - 校验失败时在 Issue 中回复错误原因并关闭；成功时打上 `build` 标签并回复“已开始编译”。
 3. **build**（矩阵并行）：
    - `actions/checkout` 拉取源码（私有仓库使用 `SOURCE_PAT` Secret，`persist-credentials: false`）；

@@ -9,55 +9,62 @@
 <body>
   <main class="page">
     <section class="hero card">
-      <p class="eyebrow">GitHub Pages + GitHub Actions</p>
-      <h1>FFmpeg 在线自动编译</h1>
+      <div class="hero-head">
+        <p class="eyebrow">GitHub Pages + GitHub Actions</p>
+        <label class="lang-switch">
+          <span class="visually-hidden" data-i18n="lang.label">语言</span>
+          <select id="lang-select" data-i18n-aria-label="lang.label"></select>
+        </label>
+      </div>
+      <h1 data-i18n="page.title">FFmpeg 在线自动编译</h1>
       <dl class="repo-summary">
         <div>
-          <dt>当前仓库</dt>
-          <dd id="detected-repo">识别中…</dd>
+          <dt data-i18n="hero.repo">当前仓库</dt>
+          <dd id="detected-repo"></dd>
         </div>
         <div>
-          <dt>Issues 功能</dt>
-          <dd id="issues-status">检测中…</dd>
+          <dt data-i18n="hero.issues">Issues 功能</dt>
+          <dd id="issues-status"></dd>
         </div>
       </dl>
     </section>
 
     <section class="card">
-      <h2>提交编译任务</h2>
+      <h2 data-i18n="form.title">提交编译任务</h2>
       <form id="build-form" class="build-form">
         <label>
-          <span>FFmpeg Git 仓库地址</span>
-          <input id="source-repository" name="sourceRepository" type="text" inputmode="url" value="https://github.com/FFmpeg/FFmpeg" placeholder="https://github.com/FFmpeg/FFmpeg 或 git@github.com:your-name/ffmpeg.git" required>
-          <small>支持公有/私有 GitHub 仓库（HTTPS 或 SSH 写法）。私有仓库需先在本仓库配置 <code>SOURCE_PAT</code> Secret。</small>
+          <span data-i18n="form.source">FFmpeg Git 仓库地址</span>
+          <input id="source-repository" name="sourceRepository" type="text" inputmode="url" value="https://github.com/FFmpeg/FFmpeg"
+            data-i18n-placeholder="form.source.placeholder" required>
+          <small data-i18n-html="form.source.help"></small>
         </label>
 
         <label>
-          <span>源码分支 / tag / commit（可选）</span>
-          <input id="source-ref" name="sourceRef" type="text" placeholder="master / n7.1 / 完整 40 位 commit SHA（留空则使用默认分支 HEAD）">
-          <small>commit 需填写完整 40 位 SHA；留空则检出源码仓库的默认分支 HEAD。</small>
+          <span data-i18n="form.ref">源码分支 / tag / commit（可选）</span>
+          <input id="source-ref" name="sourceRef" type="text" data-i18n-placeholder="form.ref.placeholder">
+          <small data-i18n="form.ref.help"></small>
         </label>
 
         <div class="grid">
           <label>
-            <span>目标平台</span>
+            <span data-i18n="form.platform">目标平台</span>
             <select id="target-platform" name="targetPlatform">
               <option value="linux">Linux</option>
               <option value="macos">macOS</option>
               <option value="windows">Windows</option>
-              <option value="all">全部平台（并行）</option>
+              <option value="all" data-i18n="form.platform.all">全部平台（并行）</option>
             </select>
           </label>
 
           <label>
-            <span>目标指令集</span>
+            <span data-i18n="form.arch">目标指令集</span>
             <select id="target-arch" name="targetArch">
               <!-- populated dynamically based on selected platform -->
             </select>
           </label>
 
           <label>
-            <span>打包格式</span>
+            <span data-i18n="form.package">打包格式</span>
             <select id="package-format" name="packageFormat">
               <option value="tar.gz">tar.gz</option>
               <option value="zip">zip</option>
@@ -66,7 +73,7 @@
         </div>
 
         <fieldset class="config">
-          <legend>编译参数</legend>
+          <legend data-i18n="config.legend">编译参数</legend>
 
           <div id="segments" class="segments"></div>
 
@@ -75,29 +82,28 @@
 
           <div class="choice-group">
             <div class="group-head">
-              <span class="group-title">组件</span>
-              <div id="component-mode" class="segmented" role="radiogroup" aria-label="组件"></div>
+              <span class="group-title" data-i18n="config.components">组件</span>
+              <div id="component-mode" class="segmented" role="radiogroup" data-i18n-aria-label="config.components"></div>
             </div>
             <small id="component-mode-hint" class="muted"></small>
             <div id="component-groups" class="component-groups"></div>
           </div>
 
           <details class="advanced">
-            <summary>高级：自定义参数</summary>
+            <summary data-i18n="config.advanced">高级：自定义参数</summary>
             <label>
-              <span>自定义参数（追加在最后，可覆盖上面的选项）</span>
-              <textarea id="custom-options" rows="3" spellcheck="false"
-                placeholder="例如 --disable-encoders --enable-encoder=aac --extra-cflags=-O3"></textarea>
-              <small>空格或换行分隔；只能输入 <code>[-+./:=,@%A-Za-z0-9_]</code> 字符，其它字符会被自动过滤。</small>
+              <span data-i18n="config.custom.label">自定义参数（追加在最后，可覆盖上面的选项）</span>
+              <textarea id="custom-options" rows="3" spellcheck="false" data-i18n-placeholder="config.custom.placeholder"></textarea>
+              <small data-i18n-html="config.custom.help"></small>
             </label>
           </details>
 
           <div class="preview">
             <div class="preview-head">
-              <span class="group-title">最终 configure 参数</span>
+              <span class="group-title" data-i18n="config.preview">最终 configure 参数</span>
               <div class="preview-actions">
-                <button id="copy-config" type="button" class="secondary small">复制</button>
-                <button id="reset-config" type="button" class="secondary small">恢复默认</button>
+                <button id="copy-config" type="button" class="secondary small" data-i18n="config.copy">复制</button>
+                <button id="reset-config" type="button" class="secondary small" data-i18n="config.reset">恢复默认</button>
               </div>
             </div>
             <code id="configure-preview"></code>
@@ -106,7 +112,7 @@
         </fieldset>
 
         <div class="actions">
-          <button type="submit">在 GitHub 上提交编译</button>
+          <button type="submit" data-i18n="form.submit">在 GitHub 上提交编译</button>
         </div>
         <p id="form-message" class="form-message"></p>
       </form>
@@ -114,11 +120,11 @@
 
     <section class="card">
       <div class="section-head">
-        <h2>编译记录</h2>
-        <button id="refresh-builds" type="button" class="secondary">刷新</button>
+        <h2 data-i18n="builds.title">编译记录</h2>
+        <button id="refresh-builds" type="button" class="secondary" data-i18n="builds.refresh">刷新</button>
       </div>
-      <p class="lead muted">最近 20 个编译 Issue。有任务进行中时每 10 分钟自动刷新一次。</p>
-      <div id="build-list" class="run-list empty">加载中…</div>
+      <p class="lead muted" data-i18n="builds.lead">最近 20 个编译 Issue。有任务进行中时每 10 分钟自动刷新一次。</p>
+      <div id="build-list" class="run-list empty"></div>
     </section>
   </main>
 

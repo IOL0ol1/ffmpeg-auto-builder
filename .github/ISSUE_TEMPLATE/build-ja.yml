@@ -1,0 +1,55 @@
+name: FFmpeg ビルド
+description: FFmpeg のビルドを依頼します（リポジトリのオーナーとコラボレーターの Issue のみ実行されます）
+title: "[build] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        このリポジトリの GitHub Pages でオプションを選ぶと、この Issue が自動で作成されます（推奨）。
+        送信すると GitHub Actions がビルドを開始し、進捗とダウンロードリンクをこの Issue にコメントします。
+  - type: input
+    id: source_repository
+    attributes:
+      label: ソースリポジトリ
+      description: GitHub リポジトリの URL（HTTPS または SSH 形式）。非公開リポジトリには SOURCE_PAT シークレットが必要です。
+      placeholder: https://github.com/FFmpeg/FFmpeg
+    validations:
+      required: true
+  - type: input
+    id: source_ref
+    attributes:
+      label: ブランチ / タグ / コミット
+      description: 任意（空欄ならデフォルトブランチの HEAD）。コミットは 40 桁の SHA をすべて入力してください。
+      placeholder: n7.1
+  - type: input
+    id: target_platform
+    attributes:
+      label: ターゲットプラットフォーム
+      description: "linux / macos / windows / all のいずれか"
+      value: linux
+    validations:
+      required: true
+  - type: input
+    id: target_arch
+    attributes:
+      label: ターゲットアーキテクチャ
+      description: "x86_64 / x86 / arm64 / armv7 / universal のいずれか"
+      value: x86_64
+    validations:
+      required: true
+  - type: input
+    id: package_format
+    attributes:
+      label: パッケージ形式
+      description: "tar.gz / zip のいずれか"
+      value: tar.gz
+    validations:
+      required: true
+  - type: textarea
+    id: configure_options
+    attributes:
+      label: configure フラグ
+      description: スペースまたは改行で区切ります。使用できる文字は [-+./:=,@%A-Za-z0-9_] のみです。
+      value: --disable-debug --disable-doc --enable-gpl
+    validations:
+      required: true
