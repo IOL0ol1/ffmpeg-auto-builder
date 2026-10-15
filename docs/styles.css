@@ -88,6 +88,16 @@ small,
   gap: 8px;
 }
 
+/* Fields in the same grid row are stretched to equal height; keep their content at the top
+   so labels and inputs line up across the row. */
+.build-form label {
+  align-content: start;
+}
+
+#package-hint:empty {
+  display: none;
+}
+
 .grid {
   display: grid;
   gap: 16px;
