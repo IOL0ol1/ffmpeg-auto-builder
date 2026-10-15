@@ -12,10 +12,11 @@
 - 编译开始、完成、失败都会自动在 Issue 中评论，并附 Draft Release 与 Artifact 链接；GitHub 会按你的通知设置推送提醒。
 - 支持公有 FFmpeg 仓库；配置 `SOURCE_PAT` Secret 后支持私有 FFmpeg Fork。
 - 支持 Linux / macOS / Windows 三平台并行构建，macOS 可生成 x86_64 + arm64 通用（Universal）二进制。
-- Linux 支持 x86、arm64、armv7；Windows 通过 MSYS2 支持 x86_64、x86、arm64。
+- 参照官方预编译版本的做法，**从源码编译常用第三方库并静态链接**（x264、x265、libvpx、dav1d、SVT-AV1、libaom、Opus、LAME、Vorbis、WebP、zimg、SoX 重采样、libass），每个库都可以在网页上开关。
+- Linux x86_64 / arm64 产物兼容 glibc 2.28+（RHEL 8、Debian 10、Ubuntu 20.04 及更新版本）；Windows x86_64 / x86 / arm64 用 llvm-mingw 交叉编译，生成不依赖额外 DLL 的可执行文件；macOS 支持 11.0+。Linux x86 / armv7 不含第三方库。
 - ccache 增量编译、冒烟测试、统一发布一个 Draft Release（附 `SHA256SUMS.txt`）。
 - 打包格式支持 `tar.gz`、`zip` 和可用于 C++ / C# 项目的 **NuGet 包**；选择全部平台时，一个 NuGet 包包含所有平台。
-- 产物可直接解压使用：共享库构建自动修正 rpath / install name，`.pc` 文件改为相对路径，Windows 包自动附带 MinGW 运行时 DLL，包内附 `BUILDINFO.txt`。
+- 产物可直接解压使用：共享库构建自动修正 rpath / install name，`.pc` 文件改为相对路径，Windows 可执行文件不依赖额外 DLL，包内附 `BUILDINFO.txt`。
 - 网页展示最近的编译记录、运行状态和 Job/Step 日志摘要。
 - 网页支持 **English / 简体中文 / 日本語** 切换（默认跟随浏览器语言），生成的 Issue 以及工作流在 Issue 中的回复都会使用同一语言。
 - 代码中不硬编码仓库名、用户名、密钥，Fork 后无需改代码即可使用。
@@ -26,14 +27,19 @@
 .
 ├── .github/
 │   ├── ISSUE_TEMPLATE/           # 编译请求的 Issue 表单（build.yml 英文 / build-zh-CN.yml / build-ja.yml）
-│   └── workflows/build.yml       # 编译流水线（setup → build matrix → lipo → release）
+│   └── workflows/
+│       ├── build.yml             # 编译流水线（setup → build matrix → lipo → release）
+│       └── deps.yml              # 预先编译并缓存第三方库
+├── deps/                         # 每个第三方库一个编译脚本（版本、下载地址、SHA256、编译步骤）
 ├── docs/                         # GitHub Pages 前端（index.html / app.js / configure.js / i18n.js / styles.css）
 └── scripts/
     ├── common.sh                 # 公共工具函数（仓库地址解析、参数过滤等）
     ├── parse-issue.py            # 从 Issue 正文解析编译参数并识别语言
     ├── issue-comment.sh          # 按 Issue 语言回复开始 / 校验失败 / 编译结果
     ├── resolve-params.sh         # 校验参数、生成 release tag 与构建矩阵
-    ├── install-deps.sh           # Linux / macOS 依赖安装（apt / brew）
+    ├── install-deps.sh           # 安装编译工具（dnf / apt / brew、llvm-mingw）
+    ├── toolchain.sh              # 各目标平台的工具链配置，第三方库与 FFmpeg 共用
+    ├── build-deps.sh             # 把 deps/*.sh 编译成静态库
     ├── build-ffmpeg.sh           # 编译、修正产物路径、冒烟测试并打包
     ├── pack-nuget.py             # 将各平台压缩包合并为一个 NuGet 包
     └── lipo-universal.sh         # 将 x86_64 + arm64 包合并为 macOS 通用二进制
@@ -113,7 +119,7 @@ BUILDINFO.txt   源码仓库、ref、commit、编译器、configure 参数
 - **直接运行**：`./bin/ffmpeg -version`。共享库构建已设置 rpath（Linux 为 `$ORIGIN/../lib`，macOS 为 `@loader_path/../lib`），不需要设置 `LD_LIBRARY_PATH` / `DYLD_LIBRARY_PATH`。
 - **macOS 首次运行**提示“无法验证开发者”时，执行 `xattr -dr com.apple.quarantine <解压目录>`。
 - **作为开发库使用**：`export PKG_CONFIG_PATH=<解压目录>/lib/pkgconfig`，`.pc` 文件中的路径已改为相对位置，放在任意目录都能正确解析。
-- **Windows**：`bin/` 中已附带 `libwinpthread-1.dll` 等 MinGW 运行时，可脱离 MSYS2 运行。
+- **Windows**：静态构建只有 `ffmpeg.exe` / `ffprobe.exe` 两个文件，只依赖 Windows 系统 DLL（Windows 10+）。
 
 ### 备用方式：手动运行工作流
 
@@ -123,16 +129,16 @@ BUILDINFO.txt   源码仓库、ref、commit、编译器、configure 参数
 
 | 平台    | 指令集    | Runner                       | 说明                                  |
 |---------|-----------|------------------------------|---------------------------------------|
-| linux   | x86_64    | ubuntu-latest                | 原生编译                              |
-| linux   | x86       | ubuntu-latest                | `i686-linux-gnu` 交叉编译             |
-| linux   | arm64     | ubuntu-24.04-arm             | 原生 ARM runner                       |
-| linux   | armv7     | ubuntu-latest                | `arm-linux-gnueabihf` 交叉编译        |
-| macos   | x86_64    | macos-15-intel               | 原生编译（最低系统 macOS 11）         |
-| macos   | arm64     | macos-15                     | 原生编译（最低系统 macOS 11）         |
+| linux   | x86_64    | ubuntu-latest，manylinux_2_28 容器 | 原生编译，glibc 2.28+，含第三方库 |
+| linux   | arm64     | ubuntu-24.04-arm，manylinux_2_28 容器 | 原生编译，glibc 2.28+，含第三方库 |
+| linux   | x86       | ubuntu-latest                | `i686-linux-gnu` 交叉编译，仅 FFmpeg  |
+| linux   | armv7     | ubuntu-latest                | `arm-linux-gnueabihf` 交叉编译，仅 FFmpeg |
+| macos   | x86_64    | macos-15-intel               | 原生编译（最低 macOS 11），含第三方库 |
+| macos   | arm64     | macos-15                     | 原生编译（最低 macOS 11），含第三方库 |
 | macos   | universal | macos-15-intel + macos-15    | 分别编译后 lipo 合并（含静态库）      |
-| windows | x86_64    | windows-latest               | MSYS2 MINGW64                         |
-| windows | x86       | windows-latest               | MSYS2 MINGW32（实验性，见已知限制）   |
-| windows | arm64     | windows-11-arm               | MSYS2 CLANGARM64，原生 ARM runner     |
+| windows | x86_64    | ubuntu-latest                | llvm-mingw 交叉编译，含第三方库       |
+| windows | x86       | ubuntu-latest                | llvm-mingw 交叉编译（SSE2），含第三方库 |
+| windows | arm64     | ubuntu-latest                | llvm-mingw 交叉编译，含第三方库       |
 
 > - 选择“全部平台”时，Linux / macOS / Windows 三平台同时并行构建；不适用的组合（如 macOS + x86）会被跳过。
 > - Linux / Windows 选择 `universal` 时按 x86_64 构建。
@@ -167,12 +173,37 @@ static extern IntPtr av_version_info();
 
 **C++（Visual C++，vcxproj）**：安装此包（packages.config）后，`build/native/<id>.targets` 会为 x64 / Win32 / ARM64 自动添加头文件目录、FFmpeg 头文件所需的 `__STDC_CONSTANT_MACROS` 宏、导入库（`avcodec.lib` 等），并把 DLL 复制到可执行文件旁边；可通过 `FFmpegRid` 属性手动指定 RID。其它构建系统可直接使用 `build/native/<rid>/include`、`lib` 和 `lib/pkgconfig`。
 
+## 第三方库
+
+参照官方预编译版本（如 BtbN 的 FFmpeg-Builds、evermeet.cx）的做法，下列库会针对每个目标平台从源码编译并静态链接，产物运行时不依赖这些库。每个库对应 `deps/NN-name.sh` 中的一个编译脚本，版本、下载地址和 SHA256 都已固定。
+
+| 库 | 版本 | 许可证 | FFmpeg 参数 | 说明 |
+|---|---|---|---|---|
+| x264 | stable（2025-06） | GPL | `--enable-libx264` | H.264 编码器 |
+| x265 | 4.1 | GPL | `--enable-libx265` | HEVC 编码器，8-bit |
+| libvpx | 1.17.0 | BSD | `--enable-libvpx` | VP8 / VP9，支持高位深 |
+| dav1d | 1.5.4 | BSD | `--enable-libdav1d` | AV1 解码器 |
+| SVT-AV1 | 4.2.0 | BSD | `--enable-libsvtav1` | AV1 编码器，仅 64 位 |
+| libaom | 3.15.2 | BSD | `--enable-libaom` | AV1 编解码器 |
+| Opus | 1.5.2 | BSD | `--enable-libopus` | |
+| LAME | 3.100 | LGPL | `--enable-libmp3lame` | MP3 编码器 |
+| libogg / libvorbis | 1.3.6 / 1.3.7 | BSD | `--enable-libvorbis` | |
+| libwebp | 1.6.0 | BSD | `--enable-libwebp` | |
+| zimg | 3.0.6 | WTFPL | `--enable-libzimg` | zscale 滤镜 |
+| SoX Resampler | 0.1.3 | LGPL | `--enable-libsoxr` | |
+| libass + FreeType + HarfBuzz + FriBidi | 0.17.5 / 2.14.3 / 14.6.0 / 1.0.17 | ISC / FTL / MIT / LGPL | `--enable-libass --enable-libfreetype --enable-libharfbuzz --enable-libfribidi` | 字幕、drawtext |
+| zlib | 1.3.2 | zlib | （自动检测） | |
+
+- **许可证**：x264 和 x265 是 GPL，只有选择 GPL 许可证时才可用，此时产物也是 GPL；其余库可用于 LGPL 构建。
+- **缓存**：每个目标平台第一次编译第三方库约需 20–40 分钟，结果保存在 Actions 缓存中，之后的编译直接复用。也可以先运行一次 **Actions → build-deps → Run workflow**，为所有平台预热缓存。修改某个库的脚本只会重新编译这个库。
+- **添加新库**：新增 `deps/NN-name.sh`，写明 `DEP_VERSION`、`DEP_URL`、`DEP_SHA256`，并用 `scripts/build-deps.sh` 提供的 `autotools_build`、`cmake_build` 或 `meson_build` 实现 `dep_build`；再在 `docs/configure.js` 和 `docs/i18n.js` 中为它的 `--enable-lib...` 参数加一个开关。
+
 ## configure 参数说明
 
 - 参数以空格或换行分隔，仅允许 `[-+./:=,@%A-Za-z0-9_]` 字符，含 `` ; & | $ > ` `` 或空格的值会被拒绝（因此 `--extra-cflags="-O3 -march=native"` 这类带空格的参数无法使用）。
 - 工作流会在你的参数**之前**自动注入交叉编译参数和 `--cc=ccache ...`；如需覆盖，直接写同名参数即可（后出现者生效）。
 - 不能指定 `--prefix`：安装路径由编译流程管理，工作流会拒绝该参数。
-- 运行环境只安装了编译 FFmpeg 本体所需的工具链，**没有安装 x264、x265、libvpx 等第三方库**；`--enable-libx264` 这类参数会在 configure 阶段失败。需要时可在 Fork 中修改 `scripts/install-deps.sh` 与 `scripts/resolve-params.sh` 里的 MSYS2 包列表。
+- 只有“第三方库”一节列出的库可用；其它 `--enable-lib...` 参数（如 `--enable-libfdk-aac`）会在 configure 阶段失败，除非为它添加编译脚本。
 
 ### 网页上的可视化参数
 
@@ -185,6 +216,7 @@ static extern IntPtr av_version_info();
 | 许可证 | LGPL／**GPL**（默认） | 不加参数／`--enable-gpl` |
 | 程序与库 | ffmpeg、ffprobe、libavdevice、libavfilter、libswscale、libswresample、文档 | 取消勾选即 `--disable-<名称>`（文档默认不生成：`--disable-doc`） |
 | 功能特性 | 汇编优化、硬件加速、网络协议、自动探测系统库、体积优化、PIC | `--disable-asm`、`--disable-hwaccels`、`--disable-network`、`--disable-autodetect`、`--enable-small`、`--enable-pic` |
+| 第三方库 | x264、x265、libvpx、dav1d、SVT-AV1、libaom、Opus、LAME、Vorbis、WebP、zimg、SoX 重采样、libass（默认全部开启） | `--enable-libx264` 等 |
 | 组件 | **全部组件**（默认）／精简 | 精简模式：`--disable-everything` + 按类别勾选的 `--enable-decoder=...`、`--enable-demuxer=...` 等 |
 
 - **组件精简**：可按解码器、编码器、解封装、封装、解析器、比特流滤镜、协议、滤镜分别勾选，每类都有“全选 / 清空 / 常用”快捷按钮。适合嵌入播放器、移动端等对体积敏感的场景。
@@ -193,6 +225,7 @@ static extern IntPtr av_version_info();
   - **许可证**：仅限 GPL 的组件（如 `hqdn3d`、`delogo`、`eq`、`cropdetect`、`mpdecimate` 滤镜）带 **GPL** 标记，选择 LGPL 时变灰不可选。
   - **库依赖**：关闭 libswscale / libswresample 后，精简模式中的 `scale` / `aresample` 滤镜变灰不可选。
   - **目标平台**：目标平台为 Linux 时 `https` 协议不可选（Linux 编译环境没有 TLS 库）。
+  - **第三方库**：x264 / x265（GPL）在 LGPL 下不可选；SVT-AV1 在 Windows x86 上不可选（仅支持 64 位）；Linux x86 / armv7 不含第三方库，整组不可选。
   - **精简模式**：`file` 协议固定保留，保证能读写本地文件。
   - 灰色选项悬停可查看原因；限制解除后（如切回 GPL），之前的勾选会自动恢复。
 - **为什么没有 GPL v3**：FFmpeg 自带组件中没有任何一个要求 version3，它只影响 opencore-amr、mbedtls 等第三方库。编译环境没有这些库，因此只提供 LGPL / GPL；需要时可在自定义参数中写 `--enable-version3`。
@@ -209,7 +242,9 @@ static extern IntPtr av_version_info();
    - 校验失败时在 Issue 中回复错误原因并关闭；成功时打上 `build` 标签并回复“已开始编译”。
 3. **build**（矩阵并行）：
    - `actions/checkout` 拉取源码（私有仓库使用 `SOURCE_PAT` Secret，`persist-credentials: false`）；
-   - 恢复 ccache 缓存，安装依赖（Linux/macOS 用脚本，Windows 用 `msys2/setup-msys2`）；
+   - 安装编译工具（Linux x86_64 / arm64 在 manylinux_2_28 容器中编译；Windows 在 Ubuntu 上用 llvm-mingw）；
+   - 从 Actions 缓存恢复第三方库，缺少的由 `scripts/build-deps.sh` 补齐；
+   - 恢复 ccache 缓存；
    - `scripts/build-ffmpeg.sh`：configure → make → make install → 修正 rpath / install name / `.pc` 路径 → 打包 Windows 运行时 DLL → `ffmpeg -version` 冒烟测试（交叉编译跳过）→ 写入 `BUILDINFO.txt` → 打包；
    - 上传 Artifact。
 4. **lipo**（仅 macOS universal）：合并两个架构的可执行文件、动态库与静态库。
@@ -225,10 +260,12 @@ static extern IntPtr av_version_info();
 
 ## 已知限制
 
-- **Linux 产物的 glibc 版本**：在 `ubuntu-latest` 上编译，生成的二进制依赖较新的 glibc，可能无法在老旧发行版（如 CentOS 7、Ubuntu 20.04）上运行。需要兼容老系统时，建议使用 `--enable-static --disable-shared` 并在 Fork 中改为在旧版容器内编译。
-- **Linux 交叉编译**（x86 / armv7）不会运行冒烟测试，也没有为目标架构准备第三方库。
-- **Windows x86（MINGW32）**：MSYS2 正在逐步移除 32 位环境，相关软件包可能随时不可用。
-- **Windows armv7** 已移除：MSYS2 不再提供可用的 32 位 ARM 环境。
+- **Linux x86 / armv7** 在 Ubuntu 上交叉编译，不含第三方库，依赖较新的 glibc，且不运行冒烟测试。
+- **Windows** 为交叉编译，不运行冒烟测试。
+- **x265** 目前只编译 8-bit（暂不支持 10/12-bit 多位深）。
+- **TLS**：Linux 构建没有 TLS 库，因此不支持 `https`；Windows 使用 Schannel，macOS 使用系统 TLS。
+- **Linux 上的 libass** 未编译 fontconfig：字幕字体来自字幕文件内嵌的字体或滤镜的 `fontsdir` 参数。
+- 每个目标平台第一次编译第三方库约需 20–40 分钟，缓存后不再重复。
 - **macOS Intel**：GitHub 预计在 2027 年秋随 macOS 15 镜像退役而停止提供 Intel runner，届时 macOS x86_64 / universal 需改为在 arm64 上交叉编译。
 - 页面需以 `https://<owner>.github.io/<repo>/` 形式访问才能自动识别仓库；绑定自定义域名后无法识别。
 - 修改已提交 Issue 的内容不会重新触发编译，如需调整参数请提交新的 Issue。
@@ -236,7 +273,7 @@ static extern IntPtr av_version_info();
 ## 可扩展方向
 
 - 在 Pages 中配置并保存多套 configure 预设
-- 预装常用第三方编解码库（x264、x265、libvpx、libopus 等）
+- 更多第三方库（Linux 的 OpenSSL / TLS、fontconfig、x265 多位深等）
 
 ## 许可证
 

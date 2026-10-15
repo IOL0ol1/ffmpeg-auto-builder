@@ -198,11 +198,9 @@ def write_nuspec(path, package_id, version, rids, configure, buildinfo):
     </dependencies>
   </metadata>
   <files>
-    <!-- Wildcard sources keep their path relative to the base path, so the target stays empty. -->
-    <file src="README.md" target="" />
-    <file src="build/**" target="" />
-    <file src="runtimes/**" target="" />
-    <file src="lib/**" target="" />
+    <!-- NuGet versions disagree on how "dir/**" maps to the target (some keep "dir/", some
+         drop it); "**" from the staging root keeps every path as staged in all of them. -->
+    <file src="**" exclude="*.nuspec" target="" />
   </files>
 </package>
 """, encoding="utf-8")
