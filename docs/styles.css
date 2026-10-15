@@ -382,3 +382,132 @@ button.small {
 .warnings:empty {
   display: none;
 }
+
+.segments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 32px;
+}
+
+.segments .choice-group {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+/* Hints wrap within the width of their segmented control instead of widening the group. */
+.segments .choice-group small {
+  width: 0;
+  min-width: 100%;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+.segmented {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  width: fit-content;
+  max-width: 100%;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f3f6fa;
+}
+
+.segmented button {
+  padding: 6px 12px;
+  white-space: nowrap;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.segmented button:hover {
+  background: #e7eef7;
+}
+
+.segmented button[aria-checked="true"] {
+  background: var(--accent);
+  color: #fff;
+}
+
+.toggle-groups {
+  display: grid;
+  gap: 16px;
+}
+
+.group-head,
+.preview-actions,
+.component-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.group-head {
+  justify-content: space-between;
+}
+
+.component-groups {
+  display: grid;
+  gap: 8px;
+}
+
+.component-group {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #fff;
+}
+
+.component-group > summary {
+  display: flex;
+  justify-content: space-between;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.component-group[open] > summary {
+  margin-bottom: 10px;
+}
+
+.component-tools {
+  margin-bottom: 10px;
+}
+
+.chips .choice span {
+  font-family: inherit;
+}
+
+.component-group .chips .choice span {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9rem;
+}
+
+.advanced {
+  display: grid;
+  gap: 12px;
+}
+
+.advanced > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.advanced[open] {
+  gap: 12px;
+}
+
+.advanced label {
+  margin-top: 12px;
+}
+
+@media (max-width: 640px) {
+  .segmented button {
+    padding: 6px 9px;
+  }
+}

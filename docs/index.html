@@ -68,38 +68,43 @@
         <fieldset class="config">
           <legend>编译参数</legend>
 
-          <label>
-            <span>预设方案</span>
-            <select id="preset"></select>
-            <small id="preset-description" class="muted"></small>
-          </label>
+          <div id="segments" class="segments"></div>
 
-          <div class="grid">
-            <div class="choice-group">
-              <span class="group-title">链接方式</span>
-              <div id="linkage-options" class="choices"></div>
-            </div>
-            <div class="choice-group">
-              <span class="group-title">许可证</span>
-              <div id="license-options" class="choices"></div>
-            </div>
-          </div>
+          <div id="toggle-groups" class="toggle-groups"></div>
 
           <div class="choice-group">
-            <span class="group-title">附加选项</span>
-            <div id="extra-options" class="choices chips"></div>
+            <div class="group-head">
+              <span class="group-title">组件</span>
+              <div id="component-mode" class="segmented" role="radiogroup" aria-label="组件"></div>
+            </div>
+            <small id="component-mode-hint" class="muted"></small>
+            <div id="component-groups" class="component-groups"></div>
           </div>
 
-          <label>
-            <span>自定义参数（可选，追加在最后，可覆盖上面的选项）</span>
-            <textarea id="custom-options" rows="3" placeholder="例如 --disable-encoders --enable-encoder=aac"></textarea>
-            <small>空格或换行分隔，仅允许 <code>[-+./:=,@%A-Za-z0-9_]</code> 字符。</small>
-          </label>
+          <details class="advanced">
+            <summary>高级：自定义参数 / 从命令行导入</summary>
+            <label>
+              <span>自定义参数（追加在最后，可覆盖上面的选项）</span>
+              <textarea id="custom-options" rows="3" placeholder="例如 --disable-encoders --enable-encoder=aac"></textarea>
+              <small>空格或换行分隔，仅允许 <code>[-+./:=,@%A-Za-z0-9_]</code> 字符。</small>
+            </label>
+            <label>
+              <span>从命令行导入</span>
+              <textarea id="import-input" rows="3" placeholder="粘贴已有的 configure 参数，例如 ./configure --enable-gpl --enable-shared --disable-doc"></textarea>
+            </label>
+            <div class="actions">
+              <button id="import-apply" type="button" class="secondary small">识别并应用</button>
+              <small id="import-result" class="muted"></small>
+            </div>
+          </details>
 
           <div class="preview">
             <div class="preview-head">
               <span class="group-title">最终 configure 参数</span>
-              <button id="reset-config" type="button" class="secondary small">恢复默认</button>
+              <div class="preview-actions">
+                <button id="copy-config" type="button" class="secondary small">复制</button>
+                <button id="reset-config" type="button" class="secondary small">恢复默认</button>
+              </div>
             </div>
             <code id="configure-preview"></code>
             <ul id="config-warnings" class="warnings"></ul>

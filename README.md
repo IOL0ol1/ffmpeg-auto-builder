@@ -70,7 +70,7 @@
 | 目标平台 | `Linux` / `macOS` / `Windows` / `全部平台` | `Linux` |
 | 目标指令集 | 选项随平台变化，见下方对照表 | `x86_64` |
 | 打包格式 | `tar.gz` 或 `zip` | `zip` |
-| 编译参数 | 选择预设方案、链接方式、许可证和附加选项，必要时补充自定义参数，下方实时显示最终 configure 参数（详见“configure 参数说明”） | 预设“通用”+ 静态 + GPL |
+| 编译参数 | 用可视化控件选择构建类型、链接方式、许可证、程序与库、功能特性和组件，也可从已有命令行导入；下方实时显示最终 configure 参数（详见“configure 参数说明”） | Release + 静态 + GPL |
 
 点击 **在 GitHub 上提交编译**，页面会先在本地校验参数，然后在新标签页打开 GitHub 的新建 Issue 页面，所有参数都已填好。
 
@@ -136,33 +136,26 @@ BUILDINFO.txt   源码仓库、ref、commit、编译器、configure 参数
 
 - 参数以空格或换行分隔，仅允许 `[-+./:=,@%A-Za-z0-9_]` 字符，含 `; & | $ > \`` 或空格的值会被拒绝（因此 `--extra-cflags="-O3 -march=native"` 这类带空格的参数无法使用）。
 - 工作流会在你的参数**之前**自动注入交叉编译参数和 `--cc=ccache ...`；如需覆盖，直接写同名参数即可（后出现者生效）。
-### 网页上的参数组合方式
+### 网页上的可视化参数
 
-网页不再用“选模板 → 追加到文本框”，而是按 **预设方案 → 链接方式 → 许可证 → 附加选项 → 自定义参数** 的顺序组合，并实时显示“最终 configure 参数”：
+网页把常用的 configure 开关做成了可视化控件，按 **构建类型 / 链接方式 / 许可证 → 程序与库 → 功能特性 → 组件 → 自定义参数** 的顺序生成参数，并实时显示“最终 configure 参数”（可一键复制）。当前配置会保存在浏览器本地，下次打开自动恢复；“恢复默认”可重置。
 
-- 同一个参数只会出现一次，重复选择不会叠加；取消勾选即移除。
-- 同一开关前后冲突时，后面的覆盖前面的（如自定义参数里写 `--enable-shared` 会覆盖链接方式里的 `--disable-shared`）。
-- `--enable-decoder=` 这类组件参数可以多次出现，全部保留。
-- 鼠标悬停在选项上可查看它对应的参数；点击“恢复默认”可重置所有选择。
-- 使用 `--enable-lib*`（第三方库）或 `--enable-nonfree` 时会给出提示；含非法字符时禁止提交。
-
-预设方案（只使用 FFmpeg 自带功能，无需第三方库）：
-
-| 预设 | 参数 | 适用场景 |
+| 分组 | 选项 | 对应参数 |
 |---|---|---|
-| 通用（推荐） | `--disable-debug` | 日常转码、命令行使用 |
-| 体积优先 | `--disable-debug --enable-small --disable-network` | 随应用分发命令行工具 |
-| 仅开发库 | `--disable-debug --disable-programs` | 只要 libav* 库和头文件 |
-| 播放器解码精简 | `--disable-programs --disable-everything` + 主流解码器 / 解封装器 / 解析器 + `file` 协议 | 嵌入播放器，体积最小 |
-| 调试符号版 | `--enable-debug=3 --disable-stripping` | 用 gdb / lldb 排查问题 |
+| 构建类型 | **Release**（默认）／RelWithDebInfo／Debug | `--disable-debug`／`--disable-stripping`／`--enable-debug=3 --disable-optimizations --disable-stripping` |
+| 链接方式 | **静态**（默认）／共享／静态 + 共享 | `--enable-static --disable-shared`／`--enable-shared --disable-static`／两者都启用 |
+| 许可证 | LGPL／**GPL**（默认）／GPL v3 | 不加参数／`--enable-gpl`／`--enable-gpl --enable-version3` |
+| 程序与库 | ffmpeg、ffprobe、libavdevice、libavfilter、libswscale、libswresample、文档 | 取消勾选即 `--disable-<名称>`（文档默认不生成：`--disable-doc`） |
+| 功能特性 | 汇编优化、硬件加速、网络协议、自动探测系统库、体积优化、PIC | `--disable-asm`、`--disable-hwaccels`、`--disable-network`、`--disable-autodetect`、`--enable-small`、`--enable-pic` |
+| 组件 | **全部组件**（默认）／精简 | 精简模式：`--disable-everything` + 按类别勾选的 `--enable-decoder=...`、`--enable-demuxer=...` 等 |
 
-其余分组：
-
-| 分组 | 选项 |
-|---|---|
-| 链接方式 | 静态 `--enable-static --disable-shared`（默认）／共享 `--enable-shared --disable-static`／两者 |
-| 许可证 | LGPL（不加参数）／GPL v2+ `--enable-gpl`（默认）／GPL v3 `--enable-gpl --enable-version3` |
-| 附加选项 | `--disable-doc`（默认勾选）、`--enable-small`、`--disable-network`、`--disable-avdevice`、`--enable-pic`、`--disable-autodetect` |
+- **组件精简**：可按解码器、编码器、解封装、封装、解析器、比特流滤镜、协议、滤镜分别勾选，每类都有“全选 / 清空 / 常用”快捷按钮。适合嵌入播放器、移动端等对体积敏感的场景。
+- **Debug 构建**：FFmpeg 依赖编译器的死代码消除，不支持 `-O0`，因此 Debug 仍会保留最低限度的优化。
+- **从命令行导入**：在“高级”中粘贴已有的 configure 参数（例如网上的编译教程），点击“识别并应用”即可映射到上面的控件；无法对应的参数会放入“自定义参数”。
+- **自定义参数**追加在最后，可覆盖上面任何选项（同一开关以后出现的为准）；`--enable-decoder=` 这类组件参数可以多次出现。
+- 鼠标悬停在选项上可查看说明和对应参数。
+- 页面会实时提示：关闭 libavfilter 时 ffmpeg 程序不会生成、精简模式未选协议、使用 `--enable-lib*` 第三方库、`--enable-nonfree` 不可再分发等。
+- 不允许指定 `--prefix`：安装路径由编译流程管理，网页与工作流都会拒绝。
 
 - 运行环境只安装了编译 FFmpeg 本体所需的工具链，**没有安装 x264、x265、libvpx 等第三方库**；`--enable-libx264` 这类参数会在 configure 阶段失败。需要时可在 Fork 中修改 `scripts/install-deps.sh` 与 `scripts/resolve-params.sh` 里的 MSYS2 包列表。
 

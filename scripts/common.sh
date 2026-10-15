@@ -47,6 +47,8 @@ sanitize_configure_options() {
   local token
   for token in "${tokens[@]}"; do
     [[ "$token" =~ $SAFE_TOKEN_PATTERN ]] || fail "Unsafe configure token detected: ${token}"
+    # The install prefix is managed by build-ffmpeg.sh; overriding it would break packaging.
+    [[ "$token" != --prefix=* ]] || fail "--prefix is managed by the build and cannot be overridden"
     SANITIZED_CONFIGURE_ARGS+=("$token")
   done
 }

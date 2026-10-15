@@ -1,16 +1,21 @@
 import {
-  DEFAULT_CONFIG, EXTRAS, LICENSES, LINKAGES, PRESETS, SAFE_TOKEN_PATTERN, buildConfigure,
+  COMPONENT_GROUPS, SEGMENTS, TOGGLE_GROUPS,
+  buildConfigure, defaultConfig, importConfigure, normalizeConfig,
 } from './configure.js';
 
 const form = document.querySelector('#build-form');
-const presetSelect = document.querySelector('#preset');
-const presetDescriptionNode = document.querySelector('#preset-description');
-const linkageOptionsNode = document.querySelector('#linkage-options');
-const licenseOptionsNode = document.querySelector('#license-options');
-const extraOptionsNode = document.querySelector('#extra-options');
+const segmentsNode = document.querySelector('#segments');
+const toggleGroupsNode = document.querySelector('#toggle-groups');
+const componentModeNode = document.querySelector('#component-mode');
+const componentModeHintNode = document.querySelector('#component-mode-hint');
+const componentGroupsNode = document.querySelector('#component-groups');
 const customOptionsInput = document.querySelector('#custom-options');
+const importInput = document.querySelector('#import-input');
+const importApplyButton = document.querySelector('#import-apply');
+const importResultNode = document.querySelector('#import-result');
 const configurePreviewNode = document.querySelector('#configure-preview');
 const configWarningsNode = document.querySelector('#config-warnings');
+const copyConfigButton = document.querySelector('#copy-config');
 const resetConfigButton = document.querySelector('#reset-config');
 const refreshButton = document.querySelector('#refresh-builds');
 const detectedRepoNode = document.querySelector('#detected-repo');
@@ -26,11 +31,13 @@ const ISSUE_TEMPLATE = 'build.yml';
 const AUTO_REFRESH_MS = 10 * 60 * 1000;
 const SAFE_REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/;
 const REPOSITORY_PATTERN = /^(https?:\/\/github\.com\/|git@github\.com:)[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+?(\.git)?\/?$/;
+const CONFIG_STORAGE_KEY = 'ffmpeg-builder-config-v2';
 
 const state = {
   owner: '',
   repo: '',
   refreshHandle: null,
+  config: defaultConfig(),
 };
 
 // ── Repository detection ────────────────────────────────────────────────────
@@ -141,62 +148,217 @@ function updateArchOptions() {
 
 // ── configure option builder ────────────────────────────────────────────────
 
-function renderChoices(container, items, type, name) {
-  container.replaceChildren(...items.map((item) => {
-    const label = document.createElement('label');
-    label.className = 'choice';
-    const input = document.createElement('input');
-    input.type = type;
-    input.name = name;
-    input.value = item.id;
-    const text = document.createElement('span');
-    text.textContent = item.label;
-    label.title = item.flags.join(' ') || '（不添加参数）';
-    label.append(input, text);
-    return label;
+// The controls are rendered once from the model in configure.js; every change updates
+// state.config and then syncConfigUI() reflects it back into the DOM.
+
+function loadSavedConfig() {
+  try {
+    return normalizeConfig(JSON.parse(localStorage.getItem(CONFIG_STORAGE_KEY) || 'null'));
+  } catch {
+    return defaultConfig();
+  }
+}
+
+function saveConfig() {
+  try {
+    localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(state.config));
+  } catch {
+    // Storage may be unavailable (private mode); the page works without it.
+  }
+}
+
+function makeSegmented(container, options, onSelect) {
+  container.replaceChildren(...options.map((option) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.setAttribute('role', 'radio');
+    button.dataset.value = option.id;
+    button.textContent = option.label;
+    if (option.flags) button.title = option.flags.join(' ') || '（不添加参数）';
+    button.addEventListener('click', () => onSelect(option.id));
+    return button;
   }));
+}
+
+function syncSegmented(container, value) {
+  container.querySelectorAll('button').forEach((button) => {
+    button.setAttribute('aria-checked', String(button.dataset.value === value));
+  });
+}
+
+function makeChip(text, title, onChange) {
+  const label = document.createElement('label');
+  label.className = 'choice';
+  label.title = title;
+  const input = document.createElement('input');
+  input.type = 'checkbox';
+  input.addEventListener('change', () => onChange(input.checked));
+  const span = document.createElement('span');
+  span.textContent = text;
+  label.append(input, span);
+  return label;
 }
 
 function renderConfigControls() {
-  presetSelect.replaceChildren(...PRESETS.map((preset) => {
-    const opt = document.createElement('option');
-    opt.value = preset.id;
-    opt.textContent = preset.label;
-    return opt;
+  segmentsNode.replaceChildren(...SEGMENTS.map((segment) => {
+    const group = document.createElement('div');
+    group.className = 'choice-group';
+    const title = document.createElement('span');
+    title.className = 'group-title';
+    title.textContent = segment.label;
+    const control = document.createElement('div');
+    control.className = 'segmented';
+    control.setAttribute('role', 'radiogroup');
+    control.setAttribute('aria-label', segment.label);
+    control.dataset.segment = segment.id;
+    makeSegmented(control, segment.options, (value) => updateConfig({ [segment.id]: value }));
+    const hint = document.createElement('small');
+    hint.className = 'muted';
+    hint.dataset.hintFor = segment.id;
+    group.append(title, control, hint);
+    return group;
   }));
-  renderChoices(linkageOptionsNode, LINKAGES, 'radio', 'linkage');
-  renderChoices(licenseOptionsNode, LICENSES, 'radio', 'license');
-  renderChoices(extraOptionsNode, EXTRAS, 'checkbox', 'extra');
+
+  toggleGroupsNode.replaceChildren(...TOGGLE_GROUPS.map((group) => {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'choice-group';
+    const title = document.createElement('span');
+    title.className = 'group-title';
+    title.textContent = group.label;
+    const chips = document.createElement('div');
+    chips.className = 'choices chips';
+    group.items.forEach((item) => {
+      const flags = [...(item.on || []), ...(item.off || [])].join(' / ');
+      const chip = makeChip(item.label, `${item.hint}\n${flags}`, (checked) => {
+        updateConfig({ toggles: { ...state.config.toggles, [item.id]: checked } });
+      });
+      chip.dataset.toggle = item.id;
+      chips.appendChild(chip);
+    });
+    wrapper.append(title, chips);
+    return wrapper;
+  }));
+
+  makeSegmented(componentModeNode, [
+    { id: 'all', label: '全部组件' },
+    { id: 'slim', label: '精简' },
+  ], (value) => updateConfig({ componentMode: value }));
+
+  componentGroupsNode.replaceChildren(...COMPONENT_GROUPS.map((group) => {
+    const details = document.createElement('details');
+    details.className = 'component-group';
+    details.dataset.group = group.id;
+    const summary = document.createElement('summary');
+    const name = document.createElement('span');
+    name.textContent = group.label;
+    const count = document.createElement('span');
+    count.className = 'muted count';
+    summary.append(name, count);
+
+    const tools = document.createElement('div');
+    tools.className = 'component-tools';
+    const setSelection = (names) => {
+      updateConfig({ components: { ...state.config.components, [group.id]: names } });
+    };
+    [['全选', () => setSelection([...group.items])], ['清空', () => setSelection([])], ['常用', () => setSelection([...group.defaults])]]
+      .forEach(([text, action]) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'secondary small';
+        button.textContent = text;
+        button.addEventListener('click', action);
+        tools.appendChild(button);
+      });
+
+    const chips = document.createElement('div');
+    chips.className = 'choices chips';
+    group.items.forEach((item) => {
+      const chip = makeChip(item, `--enable-${group.id}=${item}`, (checked) => {
+        const current = state.config.components[group.id] || [];
+        // Keep the catalogue order so the generated flag is stable.
+        const next = group.items.filter((name) => (name === item ? checked : current.includes(name)));
+        setSelection(next);
+      });
+      chip.dataset.component = item;
+      chips.appendChild(chip);
+    });
+
+    details.append(summary, tools, chips);
+    return details;
+  }));
 }
 
-function applyConfig(config) {
-  presetSelect.value = config.preset;
-  form.querySelectorAll('input[name="linkage"]').forEach((input) => { input.checked = input.value === config.linkage; });
-  form.querySelectorAll('input[name="license"]').forEach((input) => { input.checked = input.value === config.license; });
-  form.querySelectorAll('input[name="extra"]').forEach((input) => { input.checked = config.extras.includes(input.value); });
-  customOptionsInput.value = config.custom;
-}
+function syncConfigUI() {
+  const { config } = state;
 
-function readConfig() {
-  return {
-    preset: presetSelect.value,
-    linkage: form.querySelector('input[name="linkage"]:checked')?.value || DEFAULT_CONFIG.linkage,
-    license: form.querySelector('input[name="license"]:checked')?.value || DEFAULT_CONFIG.license,
-    extras: [...form.querySelectorAll('input[name="extra"]:checked')].map((input) => input.value),
-    custom: customOptionsInput.value,
-  };
-}
+  SEGMENTS.forEach((segment) => {
+    syncSegmented(segmentsNode.querySelector(`[data-segment="${segment.id}"]`), config[segment.id]);
+    const option = segment.options.find((item) => item.id === config[segment.id]);
+    segmentsNode.querySelector(`[data-hint-for="${segment.id}"]`).textContent = option?.hint || '';
+  });
 
-function updateConfigurePreview() {
-  const { options, warnings } = buildConfigure(readConfig());
-  presetDescriptionNode.textContent = PRESETS.find((preset) => preset.id === presetSelect.value)?.description || '';
+  toggleGroupsNode.querySelectorAll('[data-toggle]').forEach((chip) => {
+    chip.querySelector('input').checked = Boolean(config.toggles[chip.dataset.toggle]);
+  });
+
+  syncSegmented(componentModeNode, config.componentMode);
+  const slim = config.componentMode === 'slim';
+  componentModeHintNode.textContent = slim
+    ? '先禁用全部组件（--disable-everything），只编译下面勾选的项目，体积最小。'
+    : '编译 FFmpeg 自带的全部编解码器、封装格式、协议与滤镜。';
+  componentGroupsNode.hidden = !slim;
+  COMPONENT_GROUPS.forEach((group) => {
+    const node = componentGroupsNode.querySelector(`[data-group="${group.id}"]`);
+    const selected = config.components[group.id] || [];
+    node.querySelector('.count').textContent = `${selected.length} / ${group.items.length}`;
+    node.querySelectorAll('[data-component]').forEach((chip) => {
+      chip.querySelector('input').checked = selected.includes(chip.dataset.component);
+    });
+  });
+
+  if (customOptionsInput.value !== config.custom) {
+    customOptionsInput.value = config.custom;
+  }
+
+  const { options, warnings } = buildConfigure(config);
   configurePreviewNode.textContent = options;
   configWarningsNode.replaceChildren(...warnings.map((warning) => {
     const li = document.createElement('li');
-    li.className = warning.level === 'error' ? 'status-error' : 'status-warn';
+    li.className = { error: 'status-error', warn: 'status-warn', info: 'muted' }[warning.level];
     li.textContent = warning.text;
     return li;
   }));
+}
+
+function updateConfig(patch) {
+  state.config = { ...state.config, ...patch };
+  saveConfig();
+  syncConfigUI();
+}
+
+function importFromCommandLine() {
+  const text = importInput.value.trim();
+  if (!text) {
+    importResultNode.textContent = '请先粘贴 configure 参数。';
+    return;
+  }
+  const config = importConfigure(text);
+  state.config = config;
+  saveConfig();
+  syncConfigUI();
+  importResultNode.textContent = config.custom
+    ? '已应用。无法对应到可视化选项的参数已放入“自定义参数”。'
+    : '已应用，全部参数都已对应到可视化选项。';
+}
+
+async function copyConfigure() {
+  try {
+    await navigator.clipboard.writeText(configurePreviewNode.textContent);
+    copyConfigButton.textContent = '已复制';
+  } catch {
+    copyConfigButton.textContent = '复制失败';
+  }
+  window.setTimeout(() => { copyConfigButton.textContent = '复制'; }, 1500);
 }
 
 function readForm() {
@@ -208,7 +370,7 @@ function readForm() {
     targetPlatform: value('targetPlatform'),
     targetArch: value('targetArch'),
     packageFormat: value('packageFormat'),
-    configureOptions: buildConfigure(readConfig()).options,
+    configureOptions: buildConfigure(state.config).options,
   };
 }
 
@@ -220,11 +382,8 @@ function validate(params) {
   if (params.sourceRef && !SAFE_REF_PATTERN.test(params.sourceRef)) {
     return '源码分支 / tag / commit 含有不允许的字符。';
   }
-  const unsafe = params.configureOptions.split(' ').find((token) => !SAFE_TOKEN_PATTERN.test(token));
-  if (unsafe) {
-    return `自定义参数含有不允许的字符：${unsafe}`;
-  }
-  return '';
+  const blocking = buildConfigure(state.config).warnings.find((warning) => warning.level === 'error');
+  return blocking ? blocking.text : '';
 }
 
 function buildIssueUrl(params) {
@@ -460,13 +619,15 @@ targetPlatformSelect.addEventListener('change', updateArchOptions);
 updateArchOptions();
 
 renderConfigControls();
-applyConfig(DEFAULT_CONFIG);
-updateConfigurePreview();
-form.querySelector('.config').addEventListener('input', updateConfigurePreview);
-form.querySelector('.config').addEventListener('change', updateConfigurePreview);
+state.config = loadSavedConfig();
+syncConfigUI();
+customOptionsInput.addEventListener('input', () => updateConfig({ custom: customOptionsInput.value }));
+importApplyButton.addEventListener('click', importFromCommandLine);
+copyConfigButton.addEventListener('click', copyConfigure);
 resetConfigButton.addEventListener('click', () => {
-  applyConfig(DEFAULT_CONFIG);
-  updateConfigurePreview();
+  state.config = defaultConfig();
+  saveConfig();
+  syncConfigUI();
 });
 
 form.addEventListener('submit', handleSubmit);
