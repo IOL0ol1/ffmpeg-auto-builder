@@ -1,7 +1,7 @@
 import {
   COMPONENT_GROUPS, SEGMENTS, TOGGLE_GROUPS,
-  absorbCustom, buildConfigure, defaultConfig, effectiveComponents, isComponentAvailable, normalizeConfig,
-  requiresGpl, splitTokens,
+  buildConfigure, componentStatus, defaultConfig, effectiveComponents, normalizeConfig,
+  requiresGpl, sanitizeCustom, setToggle,
 } from './configure.js';
 
 const form = document.querySelector('#build-form');
@@ -11,9 +11,9 @@ const componentModeNode = document.querySelector('#component-mode');
 const componentModeHintNode = document.querySelector('#component-mode-hint');
 const componentGroupsNode = document.querySelector('#component-groups');
 const customOptionsInput = document.querySelector('#custom-options');
-const customSyncResultNode = document.querySelector('#custom-sync-result');
+const toggleNoticeNode = document.querySelector('#toggle-notice');
 const configurePreviewNode = document.querySelector('#configure-preview');
-const configWarningsNode = document.querySelector('#config-warnings');
+const configNotesNode = document.querySelector('#config-notes');
 const copyConfigButton = document.querySelector('#copy-config');
 const resetConfigButton = document.querySelector('#reset-config');
 const refreshButton = document.querySelector('#refresh-builds');
@@ -148,7 +148,12 @@ function updateArchOptions() {
 // ── configure option builder ────────────────────────────────────────────────
 
 // The controls are rendered once from the model in configure.js; every change updates
-// state.config and then syncConfigUI() reflects it back into the DOM.
+// state.config and syncConfigUI() reflects it back into the DOM. Invalid choices are made
+// unavailable in the controls themselves instead of being validated afterwards.
+
+function configContext() {
+  return { platform: targetPlatformSelect.value };
+}
 
 function loadSavedConfig() {
   try {
@@ -185,10 +190,9 @@ function syncSegmented(container, value) {
   });
 }
 
-function makeChip(text, title, onChange) {
+function makeChip(text, onChange) {
   const label = document.createElement('label');
   label.className = 'choice';
-  label.title = title;
   const input = document.createElement('input');
   input.type = 'checkbox';
   input.addEventListener('change', () => onChange(input.checked));
@@ -196,6 +200,36 @@ function makeChip(text, title, onChange) {
   span.textContent = text;
   label.append(input, span);
   return label;
+}
+
+// Briefly highlight controls changed indirectly (dependencies, custom flags).
+function flashControls(keys) {
+  keys.forEach((key) => {
+    const [kind, id] = key.split(':');
+    const node = {
+      segment: () => segmentsNode.querySelector(`[data-segment="${id}"]`),
+      toggle: () => toggleGroupsNode.querySelector(`[data-toggle="${id}"]`),
+      group: () => componentGroupsNode.querySelector(`[data-group="${id}"]`),
+      components: () => componentModeNode,
+    }[kind]?.();
+    if (!node) return;
+    node.classList.remove('flash');
+    void node.offsetWidth; // restart the animation
+    node.classList.add('flash');
+  });
+}
+
+function setToggleFromUI(item, checked) {
+  const result = setToggle(state.config, item.id, checked);
+  updateConfig(result.config);
+  const others = result.changed.filter((id) => id !== item.id);
+  const labels = others.map((id) => TOGGLE_GROUPS.flatMap((group) => group.items).find((entry) => entry.id === id).label);
+  toggleNoticeNode.textContent = others.length
+    ? (checked
+      ? `已同时开启 ${labels.join('、')}（${item.label} 依赖它）。`
+      : `已同时关闭 ${labels.join('、')}（依赖 ${item.label}）。`)
+    : '';
+  flashControls(others.map((id) => `toggle:${id}`));
 }
 
 function renderConfigControls() {
@@ -227,11 +261,9 @@ function renderConfigControls() {
     const chips = document.createElement('div');
     chips.className = 'choices chips';
     group.items.forEach((item) => {
-      const flags = [...(item.on || []), ...(item.off || [])].join(' / ');
-      const chip = makeChip(item.label, `${item.hint}\n${flags}`, (checked) => {
-        updateConfig({ toggles: { ...state.config.toggles, [item.id]: checked } });
-      });
+      const chip = makeChip(item.label, (checked) => setToggleFromUI(item, checked));
       chip.dataset.toggle = item.id;
+      chip.title = `${item.hint}\n${[...(item.on || []), ...(item.off || [])].join(' / ')}`;
       chips.appendChild(chip);
     });
     wrapper.append(title, chips);
@@ -254,11 +286,11 @@ function renderConfigControls() {
     count.className = 'muted count';
     summary.append(name, count);
 
-    const tools = document.createElement('div');
-    tools.className = 'component-tools';
     const setSelection = (names) => {
       updateConfig({ components: { ...state.config.components, [group.id]: names } });
     };
+    const tools = document.createElement('div');
+    tools.className = 'component-tools';
     [['全选', () => setSelection([...group.items])], ['清空', () => setSelection([])], ['常用', () => setSelection([...group.defaults])]]
       .forEach(([text, action]) => {
         const button = document.createElement('button');
@@ -272,14 +304,13 @@ function renderConfigControls() {
     const chips = document.createElement('div');
     chips.className = 'choices chips';
     group.items.forEach((item) => {
-      const chip = makeChip(item, `--enable-${group.id}=${item}`, (checked) => {
+      const chip = makeChip(item, (checked) => {
         const current = state.config.components[group.id] || [];
         // Keep the catalogue order so the generated flag is stable.
-        const next = group.items.filter((name) => (name === item ? checked : current.includes(name)));
-        setSelection(next);
+        setSelection(group.items.filter((entry) => (entry === item ? checked : current.includes(entry))));
       });
       chip.dataset.component = item;
-      if (requiresGpl(group, item)) {
+      if (requiresGpl(group.id, item)) {
         const badge = document.createElement('span');
         badge.className = 'badge';
         badge.textContent = 'GPL';
@@ -295,6 +326,7 @@ function renderConfigControls() {
 
 function syncConfigUI() {
   const { config } = state;
+  const context = configContext();
 
   SEGMENTS.forEach((segment) => {
     syncSegmented(segmentsNode.querySelector(`[data-segment="${segment.id}"]`), config[segment.id]);
@@ -309,21 +341,22 @@ function syncConfigUI() {
   syncSegmented(componentModeNode, config.componentMode);
   const slim = config.componentMode === 'slim';
   componentModeHintNode.textContent = slim
-    ? '先禁用全部组件（--disable-everything），只编译下面勾选的项目，体积最小。'
+    ? '先禁用全部组件（--disable-everything），只编译下面勾选的项目，体积最小。灰色项目当前不可用，悬停查看原因。'
     : '编译 FFmpeg 自带的全部编解码器、封装格式、协议与滤镜。';
   componentGroupsNode.hidden = !slim;
   COMPONENT_GROUPS.forEach((group) => {
     const node = componentGroupsNode.querySelector(`[data-group="${group.id}"]`);
-    const selected = effectiveComponents(config, group);
+    const selected = effectiveComponents(config, context, group.id);
     node.querySelector('.count').textContent = `${selected.length} / ${group.items.length}`;
     node.querySelectorAll('[data-component]').forEach((chip) => {
       const name = chip.dataset.component;
-      const available = isComponentAvailable(config, group, name);
+      const status = componentStatus(config, context, group.id, name);
       const input = chip.querySelector('input');
       input.checked = selected.includes(name);
-      input.disabled = !available;
-      chip.classList.toggle('unavailable', !available);
-      chip.title = available ? `--enable-${group.id}=${name}` : '仅限 GPL：需要把许可证切换为 GPL 或 GPL v3';
+      input.disabled = !status.available || Boolean(status.locked);
+      chip.classList.toggle('unavailable', !status.available);
+      chip.classList.toggle('locked', Boolean(status.locked));
+      chip.title = status.reason || `--enable-${group.id}=${name}`;
     });
   });
 
@@ -331,12 +364,12 @@ function syncConfigUI() {
     customOptionsInput.value = config.custom;
   }
 
-  const { options, warnings } = buildConfigure(config);
+  const { options, notes } = buildConfigure(config, context);
   configurePreviewNode.textContent = options;
-  configWarningsNode.replaceChildren(...warnings.map((warning) => {
+  configNotesNode.replaceChildren(...notes.map((note) => {
     const li = document.createElement('li');
-    li.className = { error: 'status-error', warn: 'status-warn', info: 'muted' }[warning.level];
-    li.textContent = warning.text;
+    li.className = 'muted';
+    li.textContent = note;
     return li;
   }));
 }
@@ -345,17 +378,6 @@ function updateConfig(patch) {
   state.config = { ...state.config, ...patch };
   saveConfig();
   syncConfigUI();
-}
-
-// On blur, move whatever the visual controls can express out of the custom field.
-function syncCustomIntoControls() {
-  const before = splitTokens(state.config.custom).length;
-  const next = absorbCustom(state.config);
-  const after = splitTokens(next.custom).length;
-  customSyncResultNode.textContent = before && next !== state.config && after < before
-    ? `已将 ${before - after} 个参数同步到上方选项${after ? `，${after} 个保留在此处` : ''}。`
-    : '';
-  updateConfig(next);
 }
 
 async function copyConfigure() {
@@ -377,7 +399,7 @@ function readForm() {
     targetPlatform: value('targetPlatform'),
     targetArch: value('targetArch'),
     packageFormat: value('packageFormat'),
-    configureOptions: buildConfigure(state.config).options,
+    configureOptions: buildConfigure(state.config, configContext()).options,
   };
 }
 
@@ -389,8 +411,7 @@ function validate(params) {
   if (params.sourceRef && !SAFE_REF_PATTERN.test(params.sourceRef)) {
     return '源码分支 / tag / commit 含有不允许的字符。';
   }
-  const blocking = buildConfigure(state.config).warnings.find((warning) => warning.level === 'error');
-  return blocking ? blocking.text : '';
+  return '';
 }
 
 function buildIssueUrl(params) {
@@ -622,19 +643,31 @@ Object.assign(state, detectRepository());
 formMessageNode.dataset.baseClass = 'form-message';
 buildListNode.dataset.baseClass = 'run-list';
 
-targetPlatformSelect.addEventListener('change', updateArchOptions);
+targetPlatformSelect.addEventListener('change', () => {
+  updateArchOptions();
+  syncConfigUI(); // platform-specific components (e.g. https) may change availability
+});
 updateArchOptions();
 
 renderConfigControls();
 state.config = loadSavedConfig();
 syncConfigUI();
-customOptionsInput.addEventListener('input', () => updateConfig({ custom: customOptionsInput.value }));
-customOptionsInput.addEventListener('change', syncCustomIntoControls);
+customOptionsInput.addEventListener('input', () => {
+  const clean = sanitizeCustom(customOptionsInput.value);
+  if (clean !== customOptionsInput.value) {
+    // Drop disallowed characters as they are typed, keeping the caret in place.
+    const caret = customOptionsInput.selectionStart - (customOptionsInput.value.length - clean.length);
+    customOptionsInput.value = clean;
+    customOptionsInput.setSelectionRange(caret, caret);
+  }
+  updateConfig({ custom: clean });
+});
 copyConfigButton.addEventListener('click', copyConfigure);
 resetConfigButton.addEventListener('click', () => {
   state.config = defaultConfig();
   saveConfig();
   syncConfigUI();
+  toggleNoticeNode.textContent = '';
 });
 
 form.addEventListener('submit', handleSubmit);

@@ -527,3 +527,31 @@ button.small {
   opacity: 0.45;
   cursor: not-allowed;
 }
+
+.notice {
+  color: var(--accent-strong);
+}
+
+.notice:empty {
+  display: none;
+}
+
+.chips .choice.locked {
+  cursor: default;
+  border-color: var(--accent);
+  background: #eef5ff;
+}
+
+/* Highlight controls changed indirectly, e.g. by a dependency. */
+.flash {
+  animation: flash 1.2s ease-out;
+}
+
+@keyframes flash {
+  0% {
+    box-shadow: 0 0 0 4px rgba(9, 105, 218, 0.45);
+  }
+  100% {
+    box-shadow: 0 0 0 4px rgba(9, 105, 218, 0);
+  }
+}

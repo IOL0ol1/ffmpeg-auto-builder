@@ -144,19 +144,25 @@ BUILDINFO.txt   源码仓库、ref、commit、编译器、configure 参数
 |---|---|---|
 | 构建类型 | **Release**（默认）／RelWithDebInfo／Debug | `--disable-debug`／`--disable-stripping`／`--enable-debug=3 --disable-optimizations --disable-stripping` |
 | 链接方式 | **静态**（默认）／共享／静态 + 共享 | `--enable-static --disable-shared`／`--enable-shared --disable-static`／两者都启用 |
-| 许可证 | LGPL／**GPL**（默认）／GPL v3 | 不加参数／`--enable-gpl`／`--enable-gpl --enable-version3` |
+| 许可证 | LGPL／**GPL**（默认） | 不加参数／`--enable-gpl` |
 | 程序与库 | ffmpeg、ffprobe、libavdevice、libavfilter、libswscale、libswresample、文档 | 取消勾选即 `--disable-<名称>`（文档默认不生成：`--disable-doc`） |
 | 功能特性 | 汇编优化、硬件加速、网络协议、自动探测系统库、体积优化、PIC | `--disable-asm`、`--disable-hwaccels`、`--disable-network`、`--disable-autodetect`、`--enable-small`、`--enable-pic` |
 | 组件 | **全部组件**（默认）／精简 | 精简模式：`--disable-everything` + 按类别勾选的 `--enable-decoder=...`、`--enable-demuxer=...` 等 |
 
 - **组件精简**：可按解码器、编码器、解封装、封装、解析器、比特流滤镜、协议、滤镜分别勾选，每类都有“全选 / 清空 / 常用”快捷按钮。适合嵌入播放器、移动端等对体积敏感的场景。
-- **许可证与组件联动**：FFmpeg 中部分组件仅限 GPL（如 `hqdn3d`、`delogo`、`eq`、`cropdetect`、`mpdecimate` 滤镜），在组件列表中带有 **GPL** 标记。选择 LGPL 时它们会变为不可选，且不会写入参数（configure 本身也会自动排除）；切回 GPL 后之前的勾选自动恢复。
+- **无效组合直接不可选**：页面通过交互约束避免错误配置，而不是事后校验：
+  - **依赖自动联动**：关闭 libavfilter 会同时关闭 ffmpeg（ffmpeg 依赖它），勾选 ffmpeg 会自动开启 libavfilter，页面会提示并高亮被联动的选项。
+  - **许可证**：仅限 GPL 的组件（如 `hqdn3d`、`delogo`、`eq`、`cropdetect`、`mpdecimate` 滤镜）带 **GPL** 标记，选择 LGPL 时变灰不可选。
+  - **库依赖**：关闭 libswscale / libswresample 后，精简模式中的 `scale` / `aresample` 滤镜变灰不可选。
+  - **目标平台**：目标平台为 Linux 时 `https` 协议不可选（Linux 编译环境没有 TLS 库）。
+  - **精简模式**：`file` 协议固定保留，保证能读写本地文件。
+  - 灰色选项悬停可查看原因；限制解除后（如切回 GPL），之前的勾选会自动恢复。
+- **为什么没有 GPL v3**：FFmpeg 自带组件中没有任何一个要求 version3，它只影响 opencore-amr、mbedtls 等第三方库。编译环境没有这些库，因此只提供 LGPL / GPL；需要时可在自定义参数中写 `--enable-version3`。
 - **Debug 构建**：FFmpeg 依赖编译器的死代码消除，不支持 `-O0`，因此 Debug 仍会保留最低限度的优化。
-- **自定义参数自动同步**：在“高级 → 自定义参数”中可直接粘贴已有的 configure 参数（含 `./configure` 也可以）。输入框失去焦点后，能由上方控件表达的参数（如 `--enable-shared`、`--disable-avfilter`、`--disable-everything --enable-decoder=h264`）会自动同步到对应控件，其余保留在输入框中。同步以当前选择为基础，且保证同步前后最终参数完全等价；若无法等价表达则保持原样。
+- **自定义参数**：在“高级 → 自定义参数”中自由输入，追加在最后并可覆盖上面的选项。输入时会自动过滤 `[-+./:=,@%A-Za-z0-9_]` 以外的字符；参数本身不做校验，写错的参数会在 Actions 的 configure 阶段失败并在 Issue 中回复。
 - **自定义参数**追加在最后，可覆盖上面任何选项（同一开关以后出现的为准）；`--enable-decoder=` 这类组件参数可以多次出现。
 - 鼠标悬停在选项上可查看说明和对应参数。
-- 页面会实时提示：关闭 libavfilter 时 ffmpeg 程序不会生成、精简模式未选协议、使用 `--enable-lib*` 第三方库、`--enable-nonfree` 不可再分发等。
-- 不允许指定 `--prefix`：安装路径由编译流程管理，网页与工作流都会拒绝。
+- 不能指定 `--prefix`：安装路径由编译流程管理，工作流会拒绝该参数。
 
 - 运行环境只安装了编译 FFmpeg 本体所需的工具链，**没有安装 x264、x265、libvpx 等第三方库**；`--enable-libx264` 这类参数会在 configure 阶段失败。需要时可在 Fork 中修改 `scripts/install-deps.sh` 与 `scripts/resolve-params.sh` 里的 MSYS2 包列表。
 

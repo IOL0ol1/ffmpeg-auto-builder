@@ -1,6 +1,7 @@
 // Visual model of FFmpeg configure options.
 // The build runners install no third-party libraries, so every option here only uses
-// features built into FFmpeg itself.
+// features built into FFmpeg itself. Invalid combinations are made unselectable in the
+// UI (disabled options, linked dependencies) instead of being validated after the fact.
 
 // Mutually exclusive choices, rendered as segmented controls.
 export const SEGMENTS = [
@@ -35,37 +36,29 @@ export const SEGMENTS = [
     ],
   },
   {
+    // No built-in component requires version3; it only matters for third-party libraries,
+    // so GPL v3 is not offered (--enable-version3 can still be added as a custom flag).
     id: 'license',
     label: '许可证',
     default: 'gpl',
     options: [
-      {
-        id: 'lgpl',
-        label: 'LGPL',
-        hint: 'LGPL v2.1+，可闭源动态链接；仅限 GPL 的组件会被排除。',
-        flags: [],
-      },
-      {
-        id: 'gpl',
-        label: 'GPL',
-        hint: 'GPL v2+，可用仅限 GPL 的组件，衍生程序需开源。',
-        flags: ['--enable-gpl'],
-      },
-      { id: 'gpl3', label: 'GPL v3', hint: 'GPL v3，额外启用要求 v3 的组件。', flags: ['--enable-gpl', '--enable-version3'] },
+      { id: 'lgpl', label: 'LGPL', hint: 'LGPL v2.1+，可闭源动态链接；仅限 GPL 的组件不可选。', flags: [] },
+      { id: 'gpl', label: 'GPL', hint: 'GPL v2+，可用仅限 GPL 的组件，衍生程序需开源。', flags: ['--enable-gpl'] },
     ],
   },
 ];
 
-// On/off switches. `on` / `off` are the flags emitted for each state.
+// On/off switches. `on` / `off` are the flags emitted for each state;
+// `requires` lists toggles that must stay enabled while this one is enabled.
 export const TOGGLE_GROUPS = [
   {
     id: 'programs',
     label: '程序与库',
     items: [
-      { id: 'ffmpeg', label: 'ffmpeg', hint: '转码命令行程序', default: true, off: ['--disable-ffmpeg'] },
+      { id: 'ffmpeg', label: 'ffmpeg', hint: '转码命令行程序（依赖 libavfilter）', default: true, off: ['--disable-ffmpeg'], requires: ['avfilter'] },
       { id: 'ffprobe', label: 'ffprobe', hint: '媒体信息分析程序', default: true, off: ['--disable-ffprobe'] },
       { id: 'avdevice', label: 'libavdevice', hint: '采集 / 播放设备（摄像头、屏幕等）', default: true, off: ['--disable-avdevice'] },
-      { id: 'avfilter', label: 'libavfilter', hint: '音视频滤镜，ffmpeg 程序依赖它', default: true, off: ['--disable-avfilter'] },
+      { id: 'avfilter', label: 'libavfilter', hint: '音视频滤镜', default: true, off: ['--disable-avfilter'] },
       { id: 'swscale', label: 'libswscale', hint: '图像缩放与像素格式转换', default: true, off: ['--disable-swscale'] },
       { id: 'swresample', label: 'libswresample', hint: '音频重采样与格式转换', default: true, off: ['--disable-swresample'] },
       { id: 'doc', label: '文档 / man 页', hint: '生成 HTML 文档与 man 页，会增加编译时间', default: false, off: ['--disable-doc'] },
@@ -85,8 +78,13 @@ export const TOGGLE_GROUPS = [
   },
 ];
 
+const TOGGLES = TOGGLE_GROUPS.flatMap((group) => group.items);
+const toggleById = (id) => TOGGLES.find((item) => item.id === id);
+
 // Component whitelists used in "slim" mode (--disable-everything + --enable-<kind>=...).
-// `gplOnly` lists components whose FFmpeg dependency is "gpl"; configure drops them under LGPL.
+// `locked` items are always included in slim mode; `rules` make items unavailable:
+//   gpl: needs the GPL license; needs: needs a library toggle; platforms: target platforms
+//   where the item can actually be built.
 export const COMPONENT_GROUPS = [
   {
     id: 'decoder',
@@ -129,6 +127,10 @@ export const COMPONENT_GROUPS = [
     label: '协议',
     items: ['file', 'pipe', 'data', 'concat', 'crypto', 'http', 'https', 'tcp', 'udp', 'rtmp', 'hls'],
     defaults: ['file', 'pipe'],
+    locked: ['file'],
+    rules: {
+      https: { platforms: ['macos', 'windows'], reason: 'Linux 编译环境没有 TLS 库，仅 macOS / Windows 可用' },
+    },
   },
   {
     id: 'filter',
@@ -137,35 +139,114 @@ export const COMPONENT_GROUPS = [
       'hqdn3d', 'delogo', 'eq', 'cropdetect', 'mpdecimate',
       'anull', 'acopy', 'aformat', 'aresample', 'volume', 'asetpts', 'atrim', 'amix', 'concat'],
     defaults: ['scale', 'format', 'null', 'copy', 'anull', 'acopy', 'aformat', 'aresample'],
-    gplOnly: ['hqdn3d', 'delogo', 'eq', 'cropdetect', 'mpdecimate'],
+    rules: {
+      scale: { needs: 'swscale' },
+      aresample: { needs: 'swresample' },
+      hqdn3d: { gpl: true },
+      delogo: { gpl: true },
+      eq: { gpl: true },
+      cropdetect: { gpl: true },
+      mpdecimate: { gpl: true },
+    },
   },
 ];
+
+const componentGroup = (id) => COMPONENT_GROUPS.find((group) => group.id === id);
 
 export const SAFE_TOKEN_PATTERN = /^[-+./:=,@%A-Za-z0-9_]+$/;
 
 export function defaultConfig() {
   return {
     ...Object.fromEntries(SEGMENTS.map((segment) => [segment.id, segment.default])),
-    toggles: Object.fromEntries(TOGGLE_GROUPS.flatMap((group) => group.items).map((item) => [item.id, item.default])),
+    toggles: Object.fromEntries(TOGGLES.map((item) => [item.id, item.default])),
     componentMode: 'all',
     components: Object.fromEntries(COMPONENT_GROUPS.map((group) => [group.id, [...group.defaults]])),
     custom: '',
   };
 }
 
+// A pasted "./configure ..." line is accepted; the command name itself is dropped.
+export function splitTokens(text) {
+  return String(text || '').split(/\s+/).filter((token) => token && token !== './configure' && token !== 'configure');
+}
+
+// Custom flags are free text; characters outside the safe set are simply removed.
+export function sanitizeCustom(text) {
+  return String(text || '').replace(/[^-+./:=,@%A-Za-z0-9_\s]/g, '');
+}
+
 // Fill gaps in a stored or partial config so older saved states keep working.
 export function normalizeConfig(raw) {
   const base = defaultConfig();
   const config = { ...base, ...(raw || {}) };
+  let custom = sanitizeCustom(Array.isArray(raw?.custom) ? raw.custom.join(' ') : raw?.custom);
+  if (config.license === 'gpl3') {
+    // GPL v3 is no longer offered; keep the saved build identical.
+    config.license = 'gpl';
+    custom = `${custom} --enable-version3`.trim();
+  }
   SEGMENTS.forEach((segment) => {
     if (!segment.options.some((option) => option.id === config[segment.id])) config[segment.id] = segment.default;
   });
   config.toggles = { ...base.toggles, ...(raw?.toggles || {}) };
   config.componentMode = config.componentMode === 'slim' ? 'slim' : 'all';
   config.components = { ...base.components, ...(raw?.components || {}) };
-  config.custom = String(config.custom || '');
+  config.custom = custom;
   return config;
 }
+
+// ── Availability ─────────────────────────────────────────────────────────────
+
+// context: { platform } — the selected target platform ("all" allows everything).
+export function componentStatus(config, context, groupId, name) {
+  const group = componentGroup(groupId);
+  if (group.locked?.includes(name)) {
+    return { available: true, locked: true, reason: '精简模式下必须保留' };
+  }
+  const rule = group.rules?.[name];
+  if (rule?.gpl && config.license !== 'gpl') {
+    return { available: false, reason: '仅限 GPL：需要把许可证切换为 GPL' };
+  }
+  if (rule?.needs && !config.toggles[rule.needs]) {
+    return { available: false, reason: `需要开启 ${toggleById(rule.needs).label}` };
+  }
+  if (rule?.platforms && context.platform && context.platform !== 'all' && !rule.platforms.includes(context.platform)) {
+    return { available: false, reason: rule.reason };
+  }
+  return { available: true };
+}
+
+export function requiresGpl(groupId, name) {
+  return Boolean(componentGroup(groupId).rules?.[name]?.gpl);
+}
+
+// Components that will actually be enabled: locked ones plus the available part of the
+// stored selection. The stored selection is kept, so lifting a restriction restores it.
+export function effectiveComponents(config, context, groupId) {
+  const group = componentGroup(groupId);
+  const selected = new Set([...(group.locked || []), ...(config.components[groupId] || [])]);
+  return group.items.filter((name) => selected.has(name) && componentStatus(config, context, groupId, name).available);
+}
+
+// Turn a toggle on or off and propagate dependencies; returns the ids that changed.
+export function setToggle(config, id, value) {
+  const toggles = { ...config.toggles };
+  const changed = [];
+  const visit = (itemId, next) => {
+    if (toggles[itemId] === next) return;
+    toggles[itemId] = next;
+    changed.push(itemId);
+    if (next) {
+      (toggleById(itemId).requires || []).forEach((dep) => visit(dep, true));
+    } else {
+      TOGGLES.filter((item) => item.requires?.includes(itemId)).forEach((item) => visit(item.id, false));
+    }
+  };
+  visit(id, value);
+  return { config: { ...config, toggles }, changed };
+}
+
+// ── Flag generation ──────────────────────────────────────────────────────────
 
 // Options that may legitimately repeat with different values, e.g. --enable-decoder=aac.
 const COMPONENT_KINDS = new Set(['decoder', 'encoder', 'demuxer', 'muxer', 'parser', 'protocol', 'filter', 'bsf', 'indev', 'outdev', 'hwaccel']);
@@ -180,11 +261,6 @@ function tokenKey(token) {
   return valued ? `option:${valued[1]}` : token;
 }
 
-// A pasted "./configure ..." line is accepted; the command name itself is dropped.
-export function splitTokens(text) {
-  return String(text || '').split(/\s+/).filter((token) => token && token !== './configure' && token !== 'configure');
-}
-
 export function mergeTokens(tokens) {
   const merged = new Map();
   tokens.forEach((token) => {
@@ -195,165 +271,25 @@ export function mergeTokens(tokens) {
   return [...merged.values()];
 }
 
-export function toggleFlags(item, enabled) {
-  return (enabled ? item.on : item.off) || [];
-}
-
-export function requiresGpl(group, name) {
-  return Boolean(group.gplOnly?.includes(name));
-}
-
-export function isComponentAvailable(config, group, name) {
-  return config.license !== 'lgpl' || !requiresGpl(group, name);
-}
-
-// Selected components that the current license allows; the stored selection is kept
-// so switching back to GPL restores it.
-export function effectiveComponents(config, group) {
-  return (config.components[group.id] || []).filter((name) => isComponentAvailable(config, group, name));
-}
-
 // Order: segments → toggles → components → custom; later tokens override earlier ones.
-export function buildConfigure(config) {
-  const custom = splitTokens(config.custom);
+export function buildConfigure(config, context = {}) {
   const tokens = mergeTokens([
     ...SEGMENTS.flatMap((segment) => segment.options.find((option) => option.id === config[segment.id])?.flags || []),
-    ...TOGGLE_GROUPS.flatMap((group) => group.items).flatMap((item) => toggleFlags(item, config.toggles[item.id])),
+    ...TOGGLES.flatMap((item) => (config.toggles[item.id] ? item.on : item.off) || []),
     ...(config.componentMode === 'slim'
       ? ['--disable-everything', ...COMPONENT_GROUPS
-        .map((group) => [group, effectiveComponents(config, group)])
+        .map((group) => [group, effectiveComponents(config, context, group.id)])
         .filter(([, names]) => names.length)
         .map(([group, names]) => `--enable-${group.id}=${names.join(',')}`)]
       : []),
-    ...custom,
+    ...splitTokens(config.custom),
   ]);
 
-  return { options: tokens.join(' '), tokens, warnings: collectWarnings(config, tokens, custom) };
-}
-
-function collectWarnings(config, tokens, custom) {
-  const warnings = [];
-  const error = (text) => warnings.push({ level: 'error', text });
-  const warn = (text) => warnings.push({ level: 'warn', text });
-  const info = (text) => warnings.push({ level: 'info', text });
-
-  const unsafe = custom.filter((token) => !SAFE_TOKEN_PATTERN.test(token));
-  if (unsafe.length) error(`自定义参数含有不允许的字符：${unsafe.join(' ')}`);
-  if (tokens.some((token) => token.startsWith('--prefix='))) {
-    error('不能指定 --prefix：安装路径由编译流程管理，产物会自动打包。');
+  const notes = [];
+  if (!config.toggles.ffmpeg && !config.toggles.ffprobe) notes.push('未选择任何程序，将只生成库和头文件。');
+  if (config.componentMode === 'slim'
+    && !effectiveComponents(config, context, 'decoder').length && !effectiveComponents(config, context, 'encoder').length) {
+    notes.push('未选择任何编解码器，只能做封装格式转换。');
   }
-
-  const external = tokens.filter((token) => /^--enable-lib/.test(token));
-  if (external.length) {
-    warn(`${external.join(' ')}：编译环境未安装第三方库，configure 会失败（需在 Fork 中自行添加依赖）。`);
-  }
-  if (tokens.includes('--enable-nonfree')) warn('--enable-nonfree：生成的产物不可再分发。');
-
-  const has = (flag) => tokens.includes(flag);
-  if (!has('--disable-ffmpeg') && has('--disable-avfilter')) {
-    warn('ffmpeg 程序依赖 libavfilter，关闭 libavfilter 后不会生成 ffmpeg。');
-  }
-  if (has('--disable-ffmpeg') && has('--disable-ffprobe')) info('未选择任何程序，将只生成库和头文件。');
-
-  if (config.componentMode === 'slim') {
-    const selected = (id) => effectiveComponents(config, COMPONENT_GROUPS.find((group) => group.id === id));
-    const dropped = COMPONENT_GROUPS.flatMap((group) => (config.components[group.id] || [])
-      .filter((name) => !isComponentAvailable(config, group, name)));
-    if (dropped.length) info(`LGPL 许可证下已排除仅限 GPL 的组件：${dropped.join('、')}。`);
-    if (!selected('protocol').length) warn('精简模式下未选择任何协议，将无法读写文件（至少保留 file）。');
-    if (!selected('decoder').length && !selected('encoder').length) {
-      warn('精简模式下未选择任何编解码器，只能做封装格式转换。');
-    }
-    if (selected('protocol').includes('https')) {
-      info('https 需要 TLS 支持：macOS / Windows 使用系统 TLS，Linux 编译环境未安装 TLS 库，该协议不会被编译进去。');
-    }
-  }
-  return warnings;
-}
-
-// Expand component lists so "--enable-decoder=a,b" compares equal to two separate tokens.
-function semanticSet(tokens) {
-  return new Set(tokens.flatMap((token) => {
-    const match = token.match(/^--(enable|disable)-([a-z]+)=(.+)$/);
-    if (match && COMPONENT_KINDS.has(match[2])) {
-      return match[3].split(',').filter(Boolean).map((name) => `--${match[1]}-${match[2]}=${name}`);
-    }
-    return [token];
-  }));
-}
-
-function sameSemantics(a, b) {
-  const left = semanticSet(a);
-  const right = semanticSet(b);
-  return left.size === right.size && [...left].every((token) => right.has(token));
-}
-
-function oppositeFlag(flag) {
-  return flag.startsWith('--enable-') ? flag.replace('--enable-', '--disable-') : flag.replace('--disable-', '--enable-');
-}
-
-// Flags that only restate FFmpeg's own default (e.g. --enable-doc, --disable-gpl);
-// a toggle in its default position expresses them, so they can be dropped from custom.
-const DEFAULT_RESTATEMENTS = new Set([
-  ...TOGGLE_GROUPS.flatMap((group) => group.items).flatMap((item) => [...(item.on || []), ...(item.off || [])].map(oppositeFlag)),
-  '--disable-gpl',
-  '--disable-version3',
-]);
-
-// Move custom tokens that a visual control can represent into that control.
-// The current selection is the baseline, and the result must produce exactly the same
-// effective flags as before; otherwise the config is returned unchanged.
-export function absorbCustom(config) {
-  if (!splitTokens(config.custom).length) return config;
-
-  const target = buildConfigure(config).tokens.filter((token) => !DEFAULT_RESTATEMENTS.has(token));
-  const inTarget = (flags) => flags.every((flag) => target.includes(flag));
-  const next = { ...config, toggles: { ...config.toggles }, components: { ...config.components }, custom: '' };
-
-  SEGMENTS.forEach((segment) => {
-    const candidates = segment.options.filter((option) => inTarget(option.flags));
-    const largest = Math.max(-1, ...candidates.map((option) => option.flags.length));
-    const best = candidates.filter((option) => option.flags.length === largest);
-    if (best.length && !best.some((option) => option.id === config[segment.id])) {
-      next[segment.id] = best[0].id;
-    }
-  });
-
-  TOGGLE_GROUPS.flatMap((group) => group.items).forEach((item) => {
-    if (item.off && inTarget(item.off)) next.toggles[item.id] = false;
-    else if (item.on && inTarget(item.on)) next.toggles[item.id] = true;
-    else if (item.off) next.toggles[item.id] = true;
-    else next.toggles[item.id] = false;
-  });
-
-  next.componentMode = target.includes('--disable-everything') ? 'slim' : 'all';
-  if (next.componentMode === 'slim') {
-    COMPONENT_GROUPS.forEach((group) => {
-      const names = target
-        .filter((token) => token.startsWith(`--enable-${group.id}=`))
-        .flatMap((token) => token.split('=')[1].split(','));
-      const unchanged = config.componentMode === 'slim' && sameSemantics(
-        names.map((name) => `--enable-${group.id}=${name}`),
-        effectiveComponents(config, group).map((name) => `--enable-${group.id}=${name}`),
-      );
-      // Keep the stored selection (including GPL-only items hidden under LGPL) when nothing changed.
-      if (!unchanged) {
-        next.components[group.id] = group.items.filter((name) => names.includes(name));
-      }
-    });
-  }
-
-  const produced = semanticSet(buildConfigure(next).tokens);
-  next.custom = target
-    .flatMap((token) => {
-      const match = token.match(/^--(enable|disable)-([a-z]+)=(.+)$/);
-      if (match && COMPONENT_KINDS.has(match[2])) {
-        const rest = match[3].split(',').filter((name) => !produced.has(`--${match[1]}-${match[2]}=${name}`));
-        return rest.length ? [`--${match[1]}-${match[2]}=${rest.join(',')}`] : [];
-      }
-      return produced.has(token) ? [] : [token];
-    })
-    .join(' ');
-
-  return sameSemantics(buildConfigure(next).tokens, target) ? next : config;
+  return { options: tokens.join(' '), tokens, notes };
 }
