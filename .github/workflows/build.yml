@@ -144,7 +144,7 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
-    # Linux targets with third-party libraries build in a manylinux_2_28 container.
+    # Linux x86_64 / arm64 build in a manylinux_2_28 container, Linux x86 / armv7 in Ubuntu 20.04.
     container: ${{ matrix.container }}
     timeout-minutes: 240
     env:
@@ -158,6 +158,13 @@ jobs:
       MACOSX_DEPLOYMENT_TARGET: '11.0'
       CCACHE_MAXSIZE: 500M
     steps:
+      # The Ubuntu image has no git; without it actions/checkout falls back to a tarball.
+      - name: Install git
+        if: startsWith(matrix.container, 'ubuntu:')
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git ca-certificates
+
       - name: Disable CRLF conversion
         shell: bash
         run: git config --global core.autocrlf false
