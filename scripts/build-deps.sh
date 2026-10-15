@@ -54,7 +54,7 @@ update_config_scripts() {
 
 autotools_build() {
   ./configure --prefix="$DEPS_PREFIX" --libdir="$DEPS_PREFIX/lib" \
-    --enable-static --disable-shared --with-pic "${AUTOTOOLS_HOST_ARGS[@]}" "$@"
+    --enable-static --disable-shared --with-pic ${AUTOTOOLS_HOST_ARGS[@]+"${AUTOTOOLS_HOST_ARGS[@]}"} "$@"
   make -j"$(cpu_count)"
   make install
 }
@@ -67,7 +67,7 @@ cmake_build() {
     -DCMAKE_PREFIX_PATH="$DEPS_PREFIX" \
     -DBUILD_SHARED_LIBS=OFF \
     -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
-    "${CMAKE_TOOLCHAIN_ARGS[@]}" "$@"
+    ${CMAKE_TOOLCHAIN_ARGS[@]+"${CMAKE_TOOLCHAIN_ARGS[@]}"} "$@"
   cmake --build build -j "$(cpu_count)"
   cmake --install build
 }
@@ -76,7 +76,7 @@ meson_build() {
   meson setup build \
     --prefix="$DEPS_PREFIX" --libdir=lib \
     --buildtype=release --default-library=static -Db_staticpic=true \
-    "${MESON_CROSS_ARGS[@]}" "$@"
+    ${MESON_CROSS_ARGS[@]+"${MESON_CROSS_ARGS[@]}"} "$@"
   ninja -C build -j "$(cpu_count)"
   ninja -C build install
 }

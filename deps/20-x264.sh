@@ -5,7 +5,7 @@ DEP_SHA256=6eeb82934e69fd51e043bd8c5b0d152839638d1ce7aa4eea65a3fedcf83ff224
 
 dep_build() {
   fetch_source
-  ./configure --prefix="$DEPS_PREFIX" "${AUTOTOOLS_HOST_ARGS[@]}" \
+  ./configure --prefix="$DEPS_PREFIX" ${AUTOTOOLS_HOST_ARGS[@]+"${AUTOTOOLS_HOST_ARGS[@]}"} \
     --enable-static --enable-pic --disable-cli \
     --disable-lavf --disable-swscale --disable-ffms --disable-gpac --disable-lsmash
   make -j"$(cpu_count)"

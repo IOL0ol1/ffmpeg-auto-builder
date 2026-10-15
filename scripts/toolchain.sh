@@ -68,6 +68,10 @@ setup_toolchain() {
       export NM="$triple-nm" STRIP="$triple-strip" WINDRES="$triple-windres" RC="$triple-windres"
       # PE has no -fPIC; static runtime avoids shipping libc++ / libunwind DLLs.
       export CFLAGS="-O2" CXXFLAGS="-O2"
+      # Windows 10+ requires SSE2; i686 clang does not enable it by default.
+      if [[ "$TARGET_ARCH" == "x86" ]]; then
+        export CFLAGS="$CFLAGS -msse2 -mfpmath=sse" CXXFLAGS="$CXXFLAGS -msse2 -mfpmath=sse"
+      fi
       export LDFLAGS="-L$DEPS_PREFIX/lib -static"
       TOOLCHAIN_BIN="$LLVM_MINGW/$triple/bin"
       AUTOTOOLS_HOST_ARGS=(--host="$triple")

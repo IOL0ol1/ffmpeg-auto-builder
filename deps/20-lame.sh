@@ -10,5 +10,5 @@ dep_build() {
   sed -i.bak '/lame_init_old/d' include/libmp3lame.sym
   local asm=()
   [[ "$TARGET_ARCH" == x86* ]] && asm=(--enable-nasm)
-  autotools_build --disable-frontend --disable-decoder --disable-gtktest "${asm[@]}"
+  autotools_build --disable-frontend --disable-decoder --disable-gtktest ${asm[@]+"${asm[@]}"}
 }
