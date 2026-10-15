@@ -11,69 +11,69 @@ source "$script_dir/common.sh"
 require_env ISSUE_NUMBER
 require_env RUN_URL
 
-lang="${ISSUE_LANG:-zh-CN}"
+lang="${ISSUE_LANG:-en}"
 
 text() {
   case "$lang/$1" in
-    en/invalid)        echo 'Invalid parameters; the build was not started.' ;;
-    en/invalid_retry)  echo 'Please fix the parameters and submit a new issue.' ;;
-    en/run_log)        echo 'Run log: ' ;;
-    en/started)        echo '🚀 Build started. Download links will be posted here when it finishes.' ;;
-    en/col_param)      echo 'Parameter' ;;
-    en/col_value)      echo 'Value' ;;
-    en/source)         echo 'Source' ;;
-    en/default_branch) echo '(default branch)' ;;
-    en/target)         echo 'Target' ;;
-    en/format)         echo 'Package format' ;;
-    en/progress)       echo 'Progress: ' ;;
-    en/ok)             echo '✅ Build finished.' ;;
-    en/partial)        echo '⚠️ Some targets failed; the successful packages were published.' ;;
-    en/failed)         echo '❌ Build failed; nothing to publish.' ;;
-    en/release)        echo 'Draft release (with `SHA256SUMS.txt`): ' ;;
-    en/release_note)   echo 'Drafts are visible only to the owner and collaborators; click Publish on the release page to make it public.' ;;
-    en/run_details)    echo 'Run details and artifacts: ' ;;
-    en/col_job)        echo 'Job' ;;
-    en/col_result)     echo 'Result' ;;
+    ja/invalid)           echo 'パラメータが不正なため、ビルドは開始されませんでした。' ;;
+    ja/invalid_retry)     echo 'パラメータを修正して、新しい Issue を送信してください。' ;;
+    ja/run_log)           echo '実行ログ：' ;;
+    ja/started)           echo '🚀 ビルドを開始しました。完了するとここにダウンロードリンクを投稿します。' ;;
+    ja/col_param)         echo 'パラメータ' ;;
+    ja/col_value)         echo '値' ;;
+    ja/source)            echo 'ソース' ;;
+    ja/default_branch)    echo '（デフォルトブランチ）' ;;
+    ja/target)            echo 'ターゲット' ;;
+    ja/format)            echo 'パッケージ形式' ;;
+    ja/progress)          echo '進捗：' ;;
+    ja/ok)                echo '✅ ビルドが完了しました。' ;;
+    ja/partial)           echo '⚠️ 一部のターゲットが失敗しました。成功したパッケージは公開済みです。' ;;
+    ja/failed)            echo '❌ ビルドに失敗しました。公開できるパッケージはありません。' ;;
+    ja/release)           echo 'ドラフトリリース（`SHA256SUMS.txt` 付き）：' ;;
+    ja/release_note)      echo 'ドラフトはオーナーとコラボレーターのみ閲覧できます。問題がなければリリースページで Publish をクリックして公開してください。' ;;
+    ja/run_details)       echo '実行の詳細と Artifact：' ;;
+    ja/col_job)           echo 'ジョブ' ;;
+    ja/col_result)        echo '結果' ;;
 
-    ja/invalid)        echo 'パラメータが不正なため、ビルドは開始されませんでした。' ;;
-    ja/invalid_retry)  echo 'パラメータを修正して、新しい Issue を送信してください。' ;;
-    ja/run_log)        echo '実行ログ：' ;;
-    ja/started)        echo '🚀 ビルドを開始しました。完了するとここにダウンロードリンクを投稿します。' ;;
-    ja/col_param)      echo 'パラメータ' ;;
-    ja/col_value)      echo '値' ;;
-    ja/source)         echo 'ソース' ;;
-    ja/default_branch) echo '（デフォルトブランチ）' ;;
-    ja/target)         echo 'ターゲット' ;;
-    ja/format)         echo 'パッケージ形式' ;;
-    ja/progress)       echo '進捗：' ;;
-    ja/ok)             echo '✅ ビルドが完了しました。' ;;
-    ja/partial)        echo '⚠️ 一部のターゲットが失敗しました。成功したパッケージは公開済みです。' ;;
-    ja/failed)         echo '❌ ビルドに失敗しました。公開できるパッケージはありません。' ;;
-    ja/release)        echo 'ドラフトリリース（`SHA256SUMS.txt` 付き）：' ;;
-    ja/release_note)   echo 'ドラフトはオーナーとコラボレーターのみ閲覧できます。問題がなければリリースページで Publish をクリックして公開してください。' ;;
-    ja/run_details)    echo '実行の詳細と Artifact：' ;;
-    ja/col_job)        echo 'ジョブ' ;;
-    ja/col_result)     echo '結果' ;;
+    zh-CN/invalid)        echo '参数校验失败，未开始编译。' ;;
+    zh-CN/invalid_retry)  echo '请修正参数后重新提交一个新的 Issue。' ;;
+    zh-CN/run_log)        echo '运行日志：' ;;
+    zh-CN/started)        echo '🚀 已开始编译，完成后会在这里回复下载链接。' ;;
+    zh-CN/col_param)      echo '参数' ;;
+    zh-CN/col_value)      echo '值' ;;
+    zh-CN/source)         echo '源码' ;;
+    zh-CN/default_branch) echo '（默认分支）' ;;
+    zh-CN/target)         echo '目标' ;;
+    zh-CN/format)         echo '打包格式' ;;
+    zh-CN/progress)       echo '运行进度：' ;;
+    zh-CN/ok)             echo '✅ 编译完成。' ;;
+    zh-CN/partial)        echo '⚠️ 部分目标编译失败，成功的产物已发布。' ;;
+    zh-CN/failed)         echo '❌ 编译失败，没有可发布的产物。' ;;
+    zh-CN/release)        echo 'Draft Release（含 `SHA256SUMS.txt`）：' ;;
+    zh-CN/release_note)   echo '草稿仅仓库所有者和协作者可见，确认无误后可在 Release 页面点击 Publish 公开发布。' ;;
+    zh-CN/run_details)    echo '运行详情与 Artifact：' ;;
+    zh-CN/col_job)        echo '任务' ;;
+    zh-CN/col_result)     echo '结果' ;;
 
-    */invalid)         echo '参数校验失败，未开始编译。' ;;
-    */invalid_retry)   echo '请修正参数后重新提交一个新的 Issue。' ;;
-    */run_log)         echo '运行日志：' ;;
-    */started)         echo '🚀 已开始编译，完成后会在这里回复下载链接。' ;;
-    */col_param)       echo '参数' ;;
-    */col_value)       echo '值' ;;
-    */source)          echo '源码' ;;
-    */default_branch)  echo '（默认分支）' ;;
-    */target)          echo '目标' ;;
-    */format)          echo '打包格式' ;;
-    */progress)        echo '运行进度：' ;;
-    */ok)              echo '✅ 编译完成。' ;;
-    */partial)         echo '⚠️ 部分目标编译失败，成功的产物已发布。' ;;
-    */failed)          echo '❌ 编译失败，没有可发布的产物。' ;;
-    */release)         echo 'Draft Release（含 `SHA256SUMS.txt`）：' ;;
-    */release_note)    echo '草稿仅仓库所有者和协作者可见，确认无误后可在 Release 页面点击 Publish 公开发布。' ;;
-    */run_details)     echo '运行详情与 Artifact：' ;;
-    */col_job)         echo '任务' ;;
-    */col_result)      echo '结果' ;;
+    */invalid)            echo 'Invalid parameters; the build was not started.' ;;
+    */invalid_retry)      echo 'Please fix the parameters and submit a new issue.' ;;
+    */run_log)            echo 'Run log: ' ;;
+    */started)            echo '🚀 Build started. Download links will be posted here when it finishes.' ;;
+    */col_param)          echo 'Parameter' ;;
+    */col_value)          echo 'Value' ;;
+    */source)             echo 'Source' ;;
+    */default_branch)     echo '(default branch)' ;;
+    */target)             echo 'Target' ;;
+    */format)             echo 'Package format' ;;
+    */progress)           echo 'Progress: ' ;;
+    */ok)                 echo '✅ Build finished.' ;;
+    */partial)            echo '⚠️ Some targets failed; the successful packages were published.' ;;
+    */failed)             echo '❌ Build failed; nothing to publish.' ;;
+    */release)            echo 'Draft release (with `SHA256SUMS.txt`): ' ;;
+    */release_note)       echo 'Drafts are visible only to the owner and collaborators; click Publish on the release page to make it public.' ;;
+    */run_details)        echo 'Run details and artifacts: ' ;;
+    */col_job)            echo 'Job' ;;
+    */col_result)         echo 'Result' ;;
   esac
 }
 

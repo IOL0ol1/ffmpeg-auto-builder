@@ -43,7 +43,7 @@ MISSING_MESSAGE = {
     "en": "The issue is missing required fields: {}. Please submit it from the issue template or the Pages site.",
     "ja": "Issue に必須項目がありません：{}。Issue テンプレートまたは Pages から送信してください。",
 }
-DEFAULT_LANG = "zh-CN"
+DEFAULT_LANG = "en"
 
 # Messages contain CJK text; do not depend on the runner locale.
 sys.stdout.reconfigure(encoding="utf-8")

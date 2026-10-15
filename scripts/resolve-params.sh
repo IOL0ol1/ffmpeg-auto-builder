@@ -9,31 +9,31 @@ source "$script_dir/common.sh"
 # Errors are posted on the issue, so they follow the language of its form (ISSUE_LANG).
 msg() {
   local key="$1" arg="${2:-}"
-  case "${ISSUE_LANG:-zh-CN}/$key" in
-    en/platform) printf 'Invalid target platform: %s (one of linux / macos / windows / all)' "$arg" ;;
-    en/arch)     printf 'Invalid target architecture: %s (one of x86_64 / x86 / arm64 / armv7 / universal)' "$arg" ;;
-    en/format)   printf 'Invalid package format: %s (one of tar.gz / zip)' "$arg" ;;
-    en/repo)     printf 'Only GitHub repositories are supported: %s' "$arg" ;;
-    en/ref)      printf 'Invalid branch / tag / commit: %s' "$arg" ;;
-    en/token)    printf 'configure flags contain characters that are not allowed: %s' "$arg" ;;
-    en/prefix)   printf -- '--prefix cannot be set: the install path is managed by the build' ;;
-    en/target)   printf 'No buildable target for %s' "$arg" ;;
-    ja/platform) printf 'ターゲットプラットフォームが不正です：%s（linux / macos / windows / all のいずれか）' "$arg" ;;
-    ja/arch)     printf 'ターゲットアーキテクチャが不正です：%s（x86_64 / x86 / arm64 / armv7 / universal のいずれか）' "$arg" ;;
-    ja/format)   printf 'パッケージ形式が不正です：%s（tar.gz / zip のいずれか）' "$arg" ;;
-    ja/repo)     printf 'GitHub リポジトリのみ対応しています：%s' "$arg" ;;
-    ja/ref)      printf 'ブランチ / タグ / コミットが不正です：%s' "$arg" ;;
-    ja/token)    printf 'configure フラグに使用できない文字が含まれています：%s' "$arg" ;;
-    ja/prefix)   printf -- '--prefix は指定できません（インストール先はビルド処理が管理します）' ;;
-    ja/target)   printf 'ビルドできるターゲットがありません：%s' "$arg" ;;
-    */platform)  printf '目标平台无效：%s（可选 linux / macos / windows / all）' "$arg" ;;
-    */arch)      printf '目标指令集无效：%s（可选 x86_64 / x86 / arm64 / armv7 / universal）' "$arg" ;;
-    */format)    printf '打包格式无效：%s（可选 tar.gz / zip）' "$arg" ;;
-    */repo)      printf '源码仓库只支持 GitHub 地址：%s' "$arg" ;;
-    */ref)       printf '源码分支 / tag / commit 无效：%s' "$arg" ;;
-    */token)     printf 'configure 参数含有不允许的字符：%s' "$arg" ;;
-    */prefix)    printf -- '不能指定 --prefix：安装路径由编译流程管理' ;;
-    */target)    printf '没有可构建的目标：%s' "$arg" ;;
+  case "${ISSUE_LANG:-en}/$key" in
+    ja/platform)    printf 'ターゲットプラットフォームが不正です：%s（linux / macos / windows / all のいずれか）' "$arg" ;;
+    ja/arch)        printf 'ターゲットアーキテクチャが不正です：%s（x86_64 / x86 / arm64 / armv7 / universal のいずれか）' "$arg" ;;
+    ja/format)      printf 'パッケージ形式が不正です：%s（tar.gz / zip のいずれか）' "$arg" ;;
+    ja/repo)        printf 'GitHub リポジトリのみ対応しています：%s' "$arg" ;;
+    ja/ref)         printf 'ブランチ / タグ / コミットが不正です：%s' "$arg" ;;
+    ja/token)       printf 'configure フラグに使用できない文字が含まれています：%s' "$arg" ;;
+    ja/prefix)      printf -- '--prefix は指定できません（インストール先はビルド処理が管理します）' ;;
+    ja/target)      printf 'ビルドできるターゲットがありません：%s' "$arg" ;;
+    zh-CN/platform) printf '目标平台无效：%s（可选 linux / macos / windows / all）' "$arg" ;;
+    zh-CN/arch)     printf '目标指令集无效：%s（可选 x86_64 / x86 / arm64 / armv7 / universal）' "$arg" ;;
+    zh-CN/format)   printf '打包格式无效：%s（可选 tar.gz / zip）' "$arg" ;;
+    zh-CN/repo)     printf '源码仓库只支持 GitHub 地址：%s' "$arg" ;;
+    zh-CN/ref)      printf '源码分支 / tag / commit 无效：%s' "$arg" ;;
+    zh-CN/token)    printf 'configure 参数含有不允许的字符：%s' "$arg" ;;
+    zh-CN/prefix)   printf -- '不能指定 --prefix：安装路径由编译流程管理' ;;
+    zh-CN/target)   printf '没有可构建的目标：%s' "$arg" ;;
+    */platform)     printf 'Invalid target platform: %s (one of linux / macos / windows / all)' "$arg" ;;
+    */arch)         printf 'Invalid target architecture: %s (one of x86_64 / x86 / arm64 / armv7 / universal)' "$arg" ;;
+    */format)       printf 'Invalid package format: %s (one of tar.gz / zip)' "$arg" ;;
+    */repo)         printf 'Only GitHub repositories are supported: %s' "$arg" ;;
+    */ref)          printf 'Invalid branch / tag / commit: %s' "$arg" ;;
+    */token)        printf 'configure flags contain characters that are not allowed: %s' "$arg" ;;
+    */prefix)       printf -- '--prefix cannot be set: the install path is managed by the build' ;;
+    */target)       printf 'No buildable target for %s' "$arg" ;;
   esac
 }
 

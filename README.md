@@ -1,212 +1,212 @@
 # FFmpeg Auto Builder
 
-基于 **GitHub Pages + GitHub Issues + GitHub Actions** 的 FFmpeg 在线自动编译模板仓库。任何人 Fork 后，只需开启 Actions、Issues 和 Pages，即可获得一套纯 GitHub 生态、无需第三方后端、**网页上无需输入任何令牌**的可视化编译工具。
+English | [简体中文](README.zh-CN.md)
 
-## 功能概览
+A template repository for building FFmpeg online with **GitHub Pages + GitHub Issues + GitHub Actions**. Fork it, enable Actions, Issues and Pages, and you get a visual FFmpeg build tool that runs entirely on GitHub — no third-party backend, and **no token is ever entered on the web page**.
 
-- 网页填写源码仓库、分支/tag/commit、目标平台、指令集、打包格式和 configure 参数，一键生成预填好的编译 Issue。
-- 在 GitHub 上提交 Issue 即触发编译，身份由你的 GitHub 登录状态保证，网页不接触任何令牌。
-- 只执行仓库所有者 / 协作者提交的编译 Issue，其他人提交的 Issue 不会消耗 Actions 额度。
-- 编译开始、完成、失败都会自动在 Issue 中评论，并附 Draft Release 与 Artifact 链接；GitHub 会按你的通知设置推送提醒。
-- 支持公有 FFmpeg 仓库；配置 `SOURCE_PAT` Secret 后支持私有 FFmpeg Fork。
-- 支持 Linux / macOS / Windows 三平台并行构建，macOS 可生成 x86_64 + arm64 通用（Universal）二进制。
-- Linux 支持 x86、arm64、armv7；Windows 通过 MSYS2 支持 x86_64、x86、arm64。
-- ccache 增量编译、冒烟测试、统一发布一个 Draft Release（附 `SHA256SUMS.txt`）。
-- 产物可直接解压使用：共享库构建自动修正 rpath / install name，`.pc` 文件改为相对路径，Windows 包自动附带 MinGW 运行时 DLL，包内附 `BUILDINFO.txt`。
-- 网页展示最近的编译记录、运行状态和 Job/Step 日志摘要。
-- 网页支持 **简体中文 / English / 日本語** 切换（默认跟随浏览器语言），生成的 Issue 以及工作流在 Issue 中的回复都会使用同一语言。
-- 代码中不硬编码仓库名、用户名、密钥，Fork 后无需改代码即可使用。
+## Features
 
-## 目录结构
+- Fill in the source repository, branch/tag/commit, target platform, architecture, package format and configure options on the web page, and it generates a prefilled build issue.
+- Submitting the issue on GitHub starts the build. Your GitHub sign-in is the only credential; the page never touches a token.
+- Only build issues opened by the repository owner or collaborators are run, so other people's issues cannot spend your Actions minutes.
+- The workflow comments on the issue when the build starts, fails or finishes, with links to the draft release and artifacts; GitHub notifies you according to your notification settings.
+- Builds public FFmpeg repositories, and private FFmpeg forks once a `SOURCE_PAT` secret is configured.
+- Linux / macOS / Windows builds run in parallel; macOS can produce an x86_64 + arm64 universal binary.
+- Linux supports x86, arm64 and armv7; Windows supports x86_64, x86 and arm64 through MSYS2.
+- ccache for incremental builds, a smoke test, and a single draft release per build (with `SHA256SUMS.txt`).
+- Packages work right after extraction: shared builds get fixed rpaths / install names, `.pc` files use relative paths, Windows packages include the MinGW runtime DLLs, and every package contains `BUILDINFO.txt`.
+- The page lists recent builds, their status and a job/step log summary.
+- The page can be switched between **English / 简体中文 / 日本語** (defaults to the browser language); the generated issue and the workflow's replies use the same language.
+- No repository names, user names or secrets are hard-coded, so a fork works without code changes.
+
+## Repository layout
 
 ```text
 .
 ├── .github/
-│   ├── ISSUE_TEMPLATE/           # 编译请求的 Issue 表单（build.yml 中文 / build-en.yml / build-ja.yml）
-│   └── workflows/build.yml       # 编译流水线（setup → build matrix → lipo → release）
-├── docs/                         # GitHub Pages 前端（index.html / app.js / configure.js / i18n.js / styles.css）
+│   ├── ISSUE_TEMPLATE/           # Build request issue forms (build.yml English / build-zh-CN.yml / build-ja.yml)
+│   └── workflows/build.yml       # Build pipeline (setup → build matrix → lipo → release)
+├── docs/                         # GitHub Pages site (index.html / app.js / configure.js / i18n.js / styles.css)
 └── scripts/
-    ├── common.sh                 # 公共工具函数（仓库地址解析、参数过滤等）
-    ├── parse-issue.py            # 从 Issue 正文解析编译参数并识别语言
-    ├── issue-comment.sh          # 按 Issue 语言回复开始 / 校验失败 / 编译结果
-    ├── resolve-params.sh         # 校验参数、生成 release tag 与构建矩阵
-    ├── install-deps.sh           # Linux / macOS 依赖安装（apt / brew）
-    ├── build-ffmpeg.sh           # 编译、修正产物路径、冒烟测试并打包
-    └── lipo-universal.sh         # 将 x86_64 + arm64 包合并为 macOS 通用二进制
+    ├── common.sh                 # Shared helpers (repository URL parsing, flag filtering, ...)
+    ├── parse-issue.py            # Parses build parameters from an issue body and detects its language
+    ├── issue-comment.sh          # Posts the started / invalid / result replies in the issue's language
+    ├── resolve-params.sh         # Validates parameters, creates the release tag and build matrix
+    ├── install-deps.sh           # Installs Linux / macOS dependencies (apt / brew)
+    ├── build-ffmpeg.sh           # Builds, fixes install paths, runs the smoke test and packages
+    └── lipo-universal.sh         # Merges x86_64 + arm64 packages into a macOS universal binary
 ```
 
-## 使用教程
+## Getting started
 
-### 第 1 步：Fork 并开启功能
+### Step 1: Fork and enable features
 
-1. 点击右上角 **Fork**，把本仓库复制到你自己的账号（或你有写权限的组织）下。
-2. **开启 Actions**：打开 Fork 仓库的 **Actions** 页面，点击 **I understand my workflows, go ahead and enable them**（Fork 仓库默认禁用 Actions）。
-3. **开启 Issues**：打开 **Settings → General → Features**，勾选 **Issues**（Fork 仓库默认关闭 Issues）。
-4. **开启 Pages**：打开 **Settings → Pages**，在 **Build and deployment** 中选择：
-   - **Source**：`Deploy from a branch`
-   - **Branch**：默认分支，**Folder**：`/docs`
-5. 保存后等待 1～2 分钟，页面顶部会显示 Pages 地址，形如 `https://<你的用户名>.github.io/<仓库名>/`。Custom domain 保持留空即可。
+1. Click **Fork** to copy this repository to your account (or an organization you can write to).
+2. **Enable Actions**: open the fork's **Actions** tab and click **I understand my workflows, go ahead and enable them** (Actions are disabled on forks by default).
+3. **Enable Issues**: open **Settings → General → Features** and check **Issues** (Issues are disabled on forks by default).
+4. **Enable Pages**: open **Settings → Pages** and under **Build and deployment** choose:
+   - **Source**: `Deploy from a branch`
+   - **Branch**: the default branch, **Folder**: `/docs`
+5. After a minute or two the Pages URL appears at the top, e.g. `https://<your-user>.github.io/<repo>/`. Leave **Custom domain** empty.
 
-### 第 2 步（可选）：配置私有源码仓库的访问令牌
+### Step 2 (optional): Access token for private source repositories
 
-如果 FFmpeg 源码仓库是**公开**的（例如官方 `https://github.com/FFmpeg/FFmpeg`），跳过此步。
+Skip this step if the FFmpeg source repository is **public** (for example the official `https://github.com/FFmpeg/FFmpeg`).
 
-如果是**私有**仓库：
+For a **private** repository:
 
-1. 打开 https://github.com/settings/personal-access-tokens/new 创建一个 Fine-grained PAT：
-   - **Repository access** 选择 **Only select repositories**，只勾选该私有 FFmpeg 仓库；
-   - **Repository permissions** 中只给 `Contents: Read-only`。
-2. 打开 Fork 仓库的 **Settings → Secrets and variables → Actions → New repository secret**。
-3. Name 填 `SOURCE_PAT`，Secret 填刚才的 PAT，保存。
+1. Create a fine-grained PAT at https://github.com/settings/personal-access-tokens/new:
+   - **Repository access**: **Only select repositories**, and select the private FFmpeg repositories to build (several are fine);
+   - **Repository permissions**: only `Contents: Read-only`.
+2. Open the fork's **Settings → Secrets and variables → Actions → New repository secret**.
+3. Set **Name** to `SOURCE_PAT`, paste the token as the **Secret**, and save.
 
-工作流以 Secret 形式读取它（日志中自动打码）；未配置时使用工作流自带的 `GITHUB_TOKEN`，只能拉取公开仓库。
+The workflow reads it as a secret (masked in logs). Without it, the workflow's own `GITHUB_TOKEN` is used, which can only read public repositories — a private repository under the same account still needs `SOURCE_PAT`.
 
-### 第 3 步：在网页上填写参数
+### Step 3: Fill in the form on the page
 
-打开第 1 步得到的 Pages 地址。页面顶部会显示识别到的仓库，以及 Issues 是否已开启；右上角可切换界面语言（简体中文 / English / 日本語），提交的 Issue 和工作流回复会跟随该语言。按表单填写：
+Open the Pages URL from step 1. The top shows the detected repository and whether Issues are enabled; the language menu in the top-right corner switches between English / 简体中文 / 日本語, and the submitted issue and the workflow's replies follow that language.
 
-| 字段 | 说明 | 示例 |
+| Field | Description | Example |
 |---|---|---|
-| FFmpeg Git 仓库地址 | GitHub 仓库，HTTPS 或 SSH 写法均可 | `https://github.com/FFmpeg/FFmpeg` |
-| 源码分支 / tag / commit | 可选；commit 需填完整 40 位 SHA | `n7.1`、`release/7.1` |
-| 目标平台 | `Linux` / `macOS` / `Windows` / `全部平台` | `Linux` |
-| 目标指令集 | 选项随平台变化，见下方对照表 | `x86_64` |
-| 打包格式 | `tar.gz` 或 `zip` | `zip` |
-| 编译参数 | 用可视化控件选择构建类型、链接方式、许可证、程序与库、功能特性和组件，也可在自定义参数中粘贴已有命令行；下方实时显示最终 configure 参数（详见“configure 参数说明”） | Release + 静态 + GPL |
+| FFmpeg Git repository | A GitHub repository, HTTPS or SSH form | `https://github.com/FFmpeg/FFmpeg` |
+| Branch / tag / commit | Optional; commits need the full 40-character SHA | `n7.1`, `release/7.1` |
+| Target platform | `Linux` / `macOS` / `Windows` / `All platforms` | `Linux` |
+| Target architecture | Depends on the platform; see the table below | `x86_64` |
+| Package format | `tar.gz` or `zip` | `zip` |
+| Build options | Visual controls for build type, linking, license, programs & libraries, features and components, plus optional custom flags; the final configure flags are shown live (see "configure options") | Release + static + GPL |
 
-点击 **在 GitHub 上提交编译**，页面会先在本地校验参数，然后在新标签页打开 GitHub 的新建 Issue 页面，所有参数都已填好。
+Click **Submit on GitHub**. The page checks the inputs, then opens GitHub's new-issue page in a new tab with everything filled in.
 
-### 第 4 步：在 GitHub 上提交 Issue
+### Step 4: Submit the issue on GitHub
 
-1. 确认登录的是仓库所有者（或协作者）账号，检查一下参数。
-2. 点击 **Submit new issue**。
-3. 几秒内工作流就会启动，并在 Issue 中回复 **🚀 已开始编译**，附带参数表和运行进度链接。
+1. Make sure you are signed in as the repository owner (or a collaborator) and review the parameters.
+2. Click **Submit new issue**.
+3. Within seconds the workflow starts and replies **🚀 Build started** with a parameter table and a link to the run.
 
-> 也可以不经过网页：在仓库 **Issues → New issue** 中选择 **FFmpeg 编译** / **FFmpeg Build** / **FFmpeg ビルド** 任一模板直接填写，工作流会用该模板的语言回复。
+> You can also skip the page: open **Issues → New issue**, pick the **FFmpeg Build** / **FFmpeg 编译** / **FFmpeg ビルド** template and fill it in. The workflow replies in the template's language.
 
-### 第 5 步：查看进度与下载产物
+### Step 5: Follow progress and download
 
-- **Issue 评论**：编译结束后会收到 **✅ 编译完成**、**⚠️ 部分目标编译失败** 或 **❌ 编译失败** 评论，内含：
-  - **Draft Release** 链接（含所有产物与 `SHA256SUMS.txt`）。草稿仅仓库所有者和协作者可见，确认无误后在 Release 页面点击 **Publish release** 即可公开；
-  - **运行详情**链接，可在页面底部下载 Artifact（需登录 GitHub，默认保留 90 天）；
-  - 每个平台任务的结果表。
-- 编译成功后 Issue 会自动关闭；失败时保持打开，方便排查。
-- **网页上的“编译记录”**：列出最近 20 个编译 Issue 及其运行状态，可展开 Job/Step 日志摘要。有任务进行中时每 10 分钟自动刷新一次，也可随时点击“刷新”。网页未登录访问 GitHub API，每小时限 60 次请求，超出后稍等再刷新即可。
-- 参数校验失败（例如平台写错、configure 参数含非法字符）时，工作流会在 Issue 中回复错误原因并关闭该 Issue，修正后重新提交一个新的即可。
+- **Issue comment**: when the build ends you get **✅ Build finished**, **⚠️ Some targets failed** or **❌ Build failed**, containing:
+  - a link to the **draft release** (all packages plus `SHA256SUMS.txt`). Drafts are visible only to the owner and collaborators; click **Publish release** on the release page to make it public;
+  - a link to the **run details**, where the artifacts can be downloaded at the bottom (requires signing in to GitHub; kept for 90 days by default);
+  - a result table for each platform job.
+- The issue is closed automatically after a successful build and stays open after a failure.
+- **"Builds" on the page**: lists the latest 20 build issues with their status, and can expand a job/step log summary. It refreshes every 10 minutes while a build is running, or on demand with **Refresh**. The page calls the GitHub API without signing in, which is limited to 60 requests per hour; wait a bit if you hit the limit.
+- If parameters are invalid (e.g. a wrong platform or disallowed characters in the configure flags), the workflow replies with the reason and closes the issue; fix it and submit a new issue.
 
-### 第 6 步：使用编译产物
+### Step 6: Use the package
 
-解压后的目录结构：
+Layout after extraction:
 
 ```text
-bin/            ffmpeg、ffprobe（以及 Windows 下的 DLL）
-lib/            静态库 / 共享库、pkgconfig/*.pc
-include/        头文件
-share/          示例与 man 页（取决于 configure 参数）
-BUILDINFO.txt   源码仓库、ref、commit、编译器、configure 参数
+bin/            ffmpeg, ffprobe (and DLLs on Windows)
+lib/            static / shared libraries, pkgconfig/*.pc
+include/        headers
+share/          examples and man pages (depending on configure options)
+BUILDINFO.txt   source repository, ref, commit, compiler, configure flags
 ```
 
-- **直接运行**：`./bin/ffmpeg -version`。共享库构建已设置 rpath（Linux 为 `$ORIGIN/../lib`，macOS 为 `@loader_path/../lib`），不需要设置 `LD_LIBRARY_PATH` / `DYLD_LIBRARY_PATH`。
-- **macOS 首次运行**提示“无法验证开发者”时，执行 `xattr -dr com.apple.quarantine <解压目录>`。
-- **作为开发库使用**：`export PKG_CONFIG_PATH=<解压目录>/lib/pkgconfig`，`.pc` 文件中的路径已改为相对位置，放在任意目录都能正确解析。
-- **Windows**：`bin/` 中已附带 `libwinpthread-1.dll` 等 MinGW 运行时，可脱离 MSYS2 运行。
+- **Run directly**: `./bin/ffmpeg -version`. Shared builds have their rpath set (`$ORIGIN/../lib` on Linux, `@loader_path/../lib` on macOS), so no `LD_LIBRARY_PATH` / `DYLD_LIBRARY_PATH` is needed.
+- **macOS**: if the first run is blocked because the developer cannot be verified, run `xattr -dr com.apple.quarantine <extracted-dir>`.
+- **As a development library**: `export PKG_CONFIG_PATH=<extracted-dir>/lib/pkgconfig`; the `.pc` files use relative paths, so the directory can live anywhere.
+- **Windows**: `bin/` includes `libwinpthread-1.dll` and the other MinGW runtime DLLs, so it runs without MSYS2.
 
-### 备用方式：手动运行工作流
+### Alternative: run the workflow manually
 
-在仓库 **Actions → build-ffmpeg → Run workflow** 中填写同样的参数即可，结果只出现在 Actions 运行页面和 Releases 中，不会有 Issue 评论。
+Open **Actions → build-ffmpeg → Run workflow** and fill in the same parameters. Results then appear only on the Actions run page and under Releases; there are no issue comments.
 
-## 平台与指令集对照表
+## Platforms and architectures
 
-| 平台    | 指令集    | Runner                       | 说明                                  |
-|---------|-----------|------------------------------|---------------------------------------|
-| linux   | x86_64    | ubuntu-latest                | 原生编译                              |
-| linux   | x86       | ubuntu-latest                | `i686-linux-gnu` 交叉编译             |
-| linux   | arm64     | ubuntu-24.04-arm             | 原生 ARM runner                       |
-| linux   | armv7     | ubuntu-latest                | `arm-linux-gnueabihf` 交叉编译        |
-| macos   | x86_64    | macos-15-intel               | 原生编译（最低系统 macOS 11）         |
-| macos   | arm64     | macos-15                     | 原生编译（最低系统 macOS 11）         |
-| macos   | universal | macos-15-intel + macos-15    | 分别编译后 lipo 合并（含静态库）      |
-| windows | x86_64    | windows-latest               | MSYS2 MINGW64                         |
-| windows | x86       | windows-latest               | MSYS2 MINGW32（实验性，见已知限制）   |
-| windows | arm64     | windows-11-arm               | MSYS2 CLANGARM64，原生 ARM runner     |
+| Platform | Architecture | Runner                       | Notes                                        |
+|----------|--------------|------------------------------|----------------------------------------------|
+| linux    | x86_64       | ubuntu-latest                | Native build                                 |
+| linux    | x86          | ubuntu-latest                | `i686-linux-gnu` cross-compile               |
+| linux    | arm64        | ubuntu-24.04-arm             | Native ARM runner                            |
+| linux    | armv7        | ubuntu-latest                | `arm-linux-gnueabihf` cross-compile          |
+| macos    | x86_64       | macos-15-intel               | Native build (minimum macOS 11)              |
+| macos    | arm64        | macos-15                     | Native build (minimum macOS 11)              |
+| macos    | universal    | macos-15-intel + macos-15    | Built separately, merged with lipo (including static libraries) |
+| windows  | x86_64       | windows-latest               | MSYS2 MINGW64                                |
+| windows  | x86          | windows-latest               | MSYS2 MINGW32 (experimental; see known limitations) |
+| windows  | arm64        | windows-11-arm               | MSYS2 CLANGARM64, native ARM runner          |
 
-> - 选择“全部平台”时，Linux / macOS / Windows 三平台同时并行构建；不适用的组合（如 macOS + x86）会被跳过。
-> - Linux / Windows 选择 `universal` 时按 x86_64 构建。
-> - 部分平台失败时，成功的产物仍会发布到 Draft Release。
+> - "All platforms" builds Linux, macOS and Windows in parallel; combinations that do not apply (such as macOS + x86) are skipped.
+> - `universal` builds x86_64 on Linux and Windows.
+> - If some platforms fail, the successful packages are still published to the draft release.
 
-## configure 参数说明
+## configure options
 
-- 参数以空格或换行分隔，仅允许 `[-+./:=,@%A-Za-z0-9_]` 字符，含 `; & | $ > \`` 或空格的值会被拒绝（因此 `--extra-cflags="-O3 -march=native"` 这类带空格的参数无法使用）。
-- 工作流会在你的参数**之前**自动注入交叉编译参数和 `--cc=ccache ...`；如需覆盖，直接写同名参数即可（后出现者生效）。
-### 网页上的可视化参数
+- Flags are separated by spaces or new lines and may only contain `[-+./:=,@%A-Za-z0-9_]`; values with `` ; & | $ > ` `` or spaces are rejected (so flags such as `--extra-cflags="-O3 -march=native"` cannot be used).
+- The workflow injects cross-compilation flags and `--cc=ccache ...` **before** your flags; to override them, pass the same flag yourself (the later one wins).
+- `--prefix` cannot be set: the install path is managed by the build, and the workflow rejects it.
+- The build environment only has the toolchain needed for FFmpeg itself — **no third-party libraries such as x264, x265 or libvpx** — so flags like `--enable-libx264` fail at the configure step. To add them, edit `scripts/install-deps.sh` and the MSYS2 package lists in `scripts/resolve-params.sh` in your fork.
 
-网页把常用的 configure 开关做成了可视化控件，按 **构建类型 / 链接方式 / 许可证 → 程序与库 → 功能特性 → 组件 → 自定义参数** 的顺序生成参数，并实时显示“最终 configure 参数”（可一键复制）。当前配置会保存在浏览器本地，下次打开自动恢复；“恢复默认”可重置。
+### Visual options on the page
 
-| 分组 | 选项 | 对应参数 |
+The page turns common configure switches into visual controls and builds the flags in the order **build type / linking / license → programs & libraries → features → components → custom flags**, showing the final configure flags live (with a copy button). The current choices are saved in the browser and restored next time; **Reset** restores the defaults. Hover over an option to see its description and flags.
+
+| Group | Options | Flags |
 |---|---|---|
-| 构建类型 | **Release**（默认）／RelWithDebInfo／Debug | `--disable-debug`／`--disable-stripping`／`--enable-debug=3 --disable-optimizations --disable-stripping` |
-| 链接方式 | **静态**（默认）／共享／静态 + 共享 | `--enable-static --disable-shared`／`--enable-shared --disable-static`／两者都启用 |
-| 许可证 | LGPL／**GPL**（默认） | 不加参数／`--enable-gpl` |
-| 程序与库 | ffmpeg、ffprobe、libavdevice、libavfilter、libswscale、libswresample、文档 | 取消勾选即 `--disable-<名称>`（文档默认不生成：`--disable-doc`） |
-| 功能特性 | 汇编优化、硬件加速、网络协议、自动探测系统库、体积优化、PIC | `--disable-asm`、`--disable-hwaccels`、`--disable-network`、`--disable-autodetect`、`--enable-small`、`--enable-pic` |
-| 组件 | **全部组件**（默认）／精简 | 精简模式：`--disable-everything` + 按类别勾选的 `--enable-decoder=...`、`--enable-demuxer=...` 等 |
+| Build type | **Release** (default) / RelWithDebInfo / Debug | `--disable-debug` / `--disable-stripping` / `--enable-debug=3 --disable-optimizations --disable-stripping` |
+| Linking | **Static** (default) / Shared / Static + shared | `--enable-static --disable-shared` / `--enable-shared --disable-static` / both enabled |
+| License | LGPL / **GPL** (default) | no flag / `--enable-gpl` |
+| Programs & libraries | ffmpeg, ffprobe, libavdevice, libavfilter, libswscale, libswresample, docs | unchecking emits `--disable-<name>` (docs are off by default: `--disable-doc`) |
+| Features | Assembly optimizations, hardware acceleration, network protocols, system library auto-detection, size optimization, PIC | `--disable-asm`, `--disable-hwaccels`, `--disable-network`, `--disable-autodetect`, `--enable-small`, `--enable-pic` |
+| Components | **All components** (default) / Slim | slim: `--disable-everything` plus the checked `--enable-decoder=...`, `--enable-demuxer=...` and so on |
 
-- **组件精简**：可按解码器、编码器、解封装、封装、解析器、比特流滤镜、协议、滤镜分别勾选，每类都有“全选 / 清空 / 常用”快捷按钮。适合嵌入播放器、移动端等对体积敏感的场景。
-- **无效组合直接不可选**：页面通过交互约束避免错误配置，而不是事后校验：
-  - **依赖自动联动**：关闭 libavfilter 会同时关闭 ffmpeg（ffmpeg 依赖它），勾选 ffmpeg 会自动开启 libavfilter，页面会提示并高亮被联动的选项。
-  - **许可证**：仅限 GPL 的组件（如 `hqdn3d`、`delogo`、`eq`、`cropdetect`、`mpdecimate` 滤镜）带 **GPL** 标记，选择 LGPL 时变灰不可选。
-  - **库依赖**：关闭 libswscale / libswresample 后，精简模式中的 `scale` / `aresample` 滤镜变灰不可选。
-  - **目标平台**：目标平台为 Linux 时 `https` 协议不可选（Linux 编译环境没有 TLS 库）。
-  - **精简模式**：`file` 协议固定保留，保证能读写本地文件。
-  - 灰色选项悬停可查看原因；限制解除后（如切回 GPL），之前的勾选会自动恢复。
-- **为什么没有 GPL v3**：FFmpeg 自带组件中没有任何一个要求 version3，它只影响 opencore-amr、mbedtls 等第三方库。编译环境没有这些库，因此只提供 LGPL / GPL；需要时可在自定义参数中写 `--enable-version3`。
-- **Debug 构建**：FFmpeg 依赖编译器的死代码消除，不支持 `-O0`，因此 Debug 仍会保留最低限度的优化。
-- **自定义参数**：在“高级 → 自定义参数”中自由输入，追加在最后并可覆盖上面的选项。输入时会自动过滤 `[-+./:=,@%A-Za-z0-9_]` 以外的字符；参数本身不做校验，写错的参数会在 Actions 的 configure 阶段失败并在 Issue 中回复。
-- **自定义参数**追加在最后，可覆盖上面任何选项（同一开关以后出现的为准）；`--enable-decoder=` 这类组件参数可以多次出现。
-- 鼠标悬停在选项上可查看说明和对应参数。
-- 不能指定 `--prefix`：安装路径由编译流程管理，工作流会拒绝该参数。
+- **Slim components**: pick decoders, encoders, demuxers, muxers, parsers, bitstream filters, protocols and filters per category, each with **Select all / Clear / Common** shortcuts. Useful for embedded players, mobile apps and other size-sensitive uses.
+- **Invalid combinations cannot be selected**: the page prevents bad configurations through the controls rather than validating afterwards:
+  - **Linked dependencies**: disabling libavfilter also disables ffmpeg (which depends on it), and enabling ffmpeg enables libavfilter; the page shows a notice and highlights the linked option.
+  - **License**: GPL-only components (such as the `hqdn3d`, `delogo`, `eq`, `cropdetect` and `mpdecimate` filters) carry a **GPL** badge and are greyed out under LGPL.
+  - **Library dependencies**: with libswscale / libswresample disabled, the `scale` / `aresample` filters are greyed out in slim mode.
+  - **Target platform**: the `https` protocol is unavailable for Linux targets (the Linux build environment has no TLS library).
+  - **Slim mode**: the `file` protocol is always kept so local files can be read and written.
+  - Hover over a greyed-out option to see why; when the restriction is lifted (e.g. switching back to GPL), the earlier selection comes back.
+- **Why there is no GPL v3**: no built-in FFmpeg component requires version3; it only affects third-party libraries such as opencore-amr and mbedtls. The build environment has none of them, so only LGPL / GPL are offered; add `--enable-version3` as a custom flag if needed.
+- **Debug builds**: FFmpeg relies on the compiler's dead-code elimination and cannot be built at `-O0`, so Debug keeps a minimal level of optimization.
+- **Custom flags**: free text under **Advanced → custom flags**, appended last so they can override any option above (for the same switch the later flag wins; component flags such as `--enable-decoder=` may appear several times). Characters outside `[-+./:=,@%A-Za-z0-9_]` are removed as you type; the flags themselves are not validated, and a wrong flag fails at the configure step on Actions and is reported on the issue.
 
-- 运行环境只安装了编译 FFmpeg 本体所需的工具链，**没有安装 x264、x265、libvpx 等第三方库**；`--enable-libx264` 这类参数会在 configure 阶段失败。需要时可在 Fork 中修改 `scripts/install-deps.sh` 与 `scripts/resolve-params.sh` 里的 MSYS2 包列表。
+## Build flow
 
-## 编译流程
+1. The page encodes the parameters into a new-issue link (`/issues/new?template=<template for the current language>&...`), which you submit on GitHub.
+2. The `issues: opened` event starts the workflow. The **setup** job:
+   - only handles issues whose title starts with `[build]` and whose author is the repository `OWNER` / `MEMBER` / `COLLABORATOR`, and skips everything else;
+   - detects the language (English / Chinese / Japanese) from the issue form's field labels; all replies use that language;
+   - parses the issue body with `scripts/parse-issue.py`, and `scripts/resolve-params.sh` validates the platform, architecture, package format, source URL, ref and configure flags, then creates the release tag and build matrix;
+   - on invalid parameters, replies with the reason and closes the issue; otherwise adds the `build` label and replies "Build started".
+3. **build** (parallel matrix):
+   - checks out the source with `actions/checkout` (private repositories use the `SOURCE_PAT` secret, with `persist-credentials: false`);
+   - restores the ccache cache and installs dependencies (a script on Linux/macOS, `msys2/setup-msys2` on Windows);
+   - `scripts/build-ffmpeg.sh`: configure → make → make install → fix rpath / install names / `.pc` paths → bundle Windows runtime DLLs → `ffmpeg -version` smoke test (skipped when cross-compiling) → write `BUILDINFO.txt` → package;
+   - uploads the artifact.
+4. **lipo** (macOS universal only): merges executables, shared libraries and static libraries of both architectures.
+5. **release**: collects every successful package, generates `SHA256SUMS.txt`, creates one draft release, then replies on the issue and closes it on success.
 
-1. 网页把参数编码进新建 Issue 的链接（`/issues/new?template=build.yml&...`），由你在 GitHub 上确认提交。
-2. `issues: opened` 事件触发工作流。**setup** 任务：
-   - 只处理标题以 `[build]` 开头、且提交人为仓库 `OWNER` / `MEMBER` / `COLLABORATOR` 的 Issue，其余直接跳过；
-   - `scripts/parse-issue.py` 解析 Issue 正文，`scripts/resolve-params.sh` 校验平台、指令集、打包格式、源码地址、ref 与 configure 参数，生成 release tag 和构建矩阵；
-   - 根据 Issue 表单的标题文字识别语言（中文 / 英文 / 日文），之后的所有回复都使用该语言；
-   - 校验失败时在 Issue 中回复错误原因并关闭；成功时打上 `build` 标签并回复“已开始编译”。
-3. **build**（矩阵并行）：
-   - `actions/checkout` 拉取源码（私有仓库使用 `SOURCE_PAT` Secret，`persist-credentials: false`）；
-   - 恢复 ccache 缓存，安装依赖（Linux/macOS 用脚本，Windows 用 `msys2/setup-msys2`）；
-   - `scripts/build-ffmpeg.sh`：configure → make → make install → 修正 rpath / install name / `.pc` 路径 → 打包 Windows 运行时 DLL → `ffmpeg -version` 冒烟测试（交叉编译跳过）→ 写入 `BUILDINFO.txt` → 打包；
-   - 上传 Artifact。
-4. **lipo**（仅 macOS universal）：合并两个架构的可执行文件、动态库与静态库。
-5. **release**：汇总所有成功的产物，生成 `SHA256SUMS.txt`，一次性创建 Draft Release，然后在 Issue 中回复结果，成功则关闭 Issue。
+## Security
 
-## 安全设计
+- **The page handles no tokens**: builds are triggered by issues you submit while signed in to github.com, and the page only reads public APIs, so no token can be phished or leaked through it.
+- **Only trusted users' requests run**: anyone can open issues on a public repository, but the workflow only handles build issues from the owner, organization members and collaborators.
+- **The private-source token lives in a secret**: `SOURCE_PAT` is only used inside the workflow, masked in logs, and no credentials are kept after checkout.
+- **Strict input handling**: issue content is treated as untrusted, passed to scripts only through environment variables and never interpolated into shell commands; platform, architecture and format accept fixed values only, configure flags are limited to a safe character set, and source URLs must be `github.com` repositories.
+- Build issues in a public repository are visible to everyone (including the source repository URL and configure flags). If that is not acceptable, make your fork private — the page's "Builds" list then cannot read it, so check Issues on GitHub instead.
 
-- **网页不处理任何令牌**：触发编译依靠你在 github.com 上的登录身份提交 Issue，网页只读取公开 API，不存在令牌被仿冒页面骗取或泄露的问题。
-- **只执行可信用户的请求**：公开仓库任何人都能提交 Issue，工作流只处理仓库所有者、组织成员和协作者提交的编译 Issue。
-- **私有源码令牌放在 Secret 中**：`SOURCE_PAT` 只在工作流内使用，日志自动打码，源码检出后不保留凭证。
-- **输入严格校验**：Issue 内容视为不可信数据，全部通过环境变量传给脚本，从不直接拼接进 shell 命令；平台、指令集、格式只接受固定取值，configure 参数只允许安全字符集，源码地址只接受 `github.com` 仓库。
-- 公开仓库的编译 Issue 对所有人可见（包括 configure 参数）。如不希望公开，可将 Fork 设为私有仓库，此时网页的“编译记录”无法读取，请直接在 GitHub 上查看 Issues。
+## Known limitations
 
-## 已知限制
+- **glibc version of Linux builds**: built on `ubuntu-latest`, the binaries need a recent glibc and may not run on older distributions (such as CentOS 7 or Ubuntu 20.04). For older systems, use `--enable-static --disable-shared` and build inside an older container in your fork.
+- **Linux cross-compilation** (x86 / armv7) skips the smoke test and has no third-party libraries for the target architecture.
+- **Windows x86 (MINGW32)**: MSYS2 is phasing out 32-bit environments, so the packages may disappear at any time.
+- **Windows armv7** has been removed: MSYS2 no longer provides a usable 32-bit ARM environment.
+- **macOS Intel**: GitHub plans to stop providing Intel runners when the macOS 15 image is retired in fall 2027; macOS x86_64 / universal will then need cross-compiling on arm64.
+- The page must be opened as `https://<owner>.github.io/<repo>/` to detect the repository; it cannot with a custom domain.
+- Editing a submitted issue does not start a new build; submit a new issue to change parameters.
 
-- **Linux 产物的 glibc 版本**：在 `ubuntu-latest` 上编译，生成的二进制依赖较新的 glibc，可能无法在老旧发行版（如 CentOS 7、Ubuntu 20.04）上运行。需要兼容老系统时，建议使用 `--enable-static --disable-shared` 并在 Fork 中改为在旧版容器内编译。
-- **Linux 交叉编译**（x86 / armv7）不会运行冒烟测试，也没有为目标架构准备第三方库。
-- **Windows x86（MINGW32）**：MSYS2 正在逐步移除 32 位环境，相关软件包可能随时不可用。
-- **Windows armv7** 已移除：MSYS2 不再提供可用的 32 位 ARM 环境。
-- **macOS Intel**：GitHub 预计在 2027 年秋随 macOS 15 镜像退役而停止提供 Intel runner，届时 macOS x86_64 / universal 需改为在 arm64 上交叉编译。
-- 页面需以 `https://<owner>.github.io/<repo>/` 形式访问才能自动识别仓库；绑定自定义域名后无法识别。
-- 修改已提交 Issue 的内容不会重新触发编译，如需调整参数请提交新的 Issue。
+## Ideas for extension
 
-## 可扩展方向
+- Save several configure presets on the page
+- Preinstall common third-party codec libraries (x264, x265, libvpx, libopus, ...)
 
-- 在 Pages 中配置并保存多套 configure 预设
-- 预装常用第三方编解码库（x264、x265、libvpx、libopus 等）
+## License
 
-## 许可证
-
-本仓库已附带 **MIT License**，支持任意个人或商用 Fork、自定义和再分发。
+This repository is released under the **MIT License**, so it can be forked, customized and redistributed for personal or commercial use.

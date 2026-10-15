@@ -1,55 +1,55 @@
-name: FFmpeg 编译
-description: 提交一次 FFmpeg 编译任务（只有仓库所有者和协作者提交的 Issue 会被执行）
+name: FFmpeg Build
+description: Request an FFmpeg build (only issues from the repository owner and collaborators are run)
 title: "[build] "
 body:
   - type: markdown
     attributes:
       value: |
-        推荐通过本仓库的 GitHub Pages 页面填写参数，页面会自动生成这个 Issue。
-        提交后 GitHub Actions 会自动开始编译，进度和下载链接会以评论形式回复在本 Issue 中。
+        Filling in the options on this repository's GitHub Pages site is recommended; the page creates this issue for you.
+        After you submit it, GitHub Actions starts the build and replies here with progress and download links.
   - type: input
     id: source_repository
     attributes:
-      label: 源码仓库
-      description: GitHub 仓库地址，HTTPS 或 SSH 写法均可。私有仓库需先配置 SOURCE_PAT Secret。
+      label: Source repository
+      description: GitHub repository URL, HTTPS or SSH form. Private repositories need the SOURCE_PAT secret.
       placeholder: https://github.com/FFmpeg/FFmpeg
     validations:
       required: true
   - type: input
     id: source_ref
     attributes:
-      label: 源码分支 / tag / commit
-      description: 可留空（使用默认分支 HEAD）；commit 需填写完整 40 位 SHA。
+      label: Branch / tag / commit
+      description: Optional (empty = default branch HEAD); commits need the full 40-character SHA.
       placeholder: n7.1
   - type: input
     id: target_platform
     attributes:
-      label: 目标平台
-      description: "可选值：linux / macos / windows / all"
+      label: Target platform
+      description: "One of: linux / macos / windows / all"
       value: linux
     validations:
       required: true
   - type: input
     id: target_arch
     attributes:
-      label: 目标指令集
-      description: "可选值：x86_64 / x86 / arm64 / armv7 / universal"
+      label: Target architecture
+      description: "One of: x86_64 / x86 / arm64 / armv7 / universal"
       value: x86_64
     validations:
       required: true
   - type: input
     id: package_format
     attributes:
-      label: 打包格式
-      description: "可选值：tar.gz / zip"
+      label: Package format
+      description: "One of: tar.gz / zip"
       value: tar.gz
     validations:
       required: true
   - type: textarea
     id: configure_options
     attributes:
-      label: configure 参数
-      description: 空格或换行分隔，只允许 [-+./:=,@%A-Za-z0-9_] 字符。
+      label: configure flags
+      description: Separated by spaces or new lines; only [-+./:=,@%A-Za-z0-9_] characters are allowed.
       value: --disable-debug --disable-doc --enable-gpl
     validations:
       required: true

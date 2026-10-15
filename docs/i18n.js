@@ -3,8 +3,8 @@
 // so the issue and the workflow's replies follow the page language.
 
 export const LANGUAGES = [
-  { id: 'zh-CN', label: '简体中文', issueTemplate: 'build.yml' },
-  { id: 'en', label: 'English', issueTemplate: 'build-en.yml' },
+  { id: 'en', label: 'English', issueTemplate: 'build.yml' },
+  { id: 'zh-CN', label: '简体中文', issueTemplate: 'build-zh-CN.yml' },
   { id: 'ja', label: '日本語', issueTemplate: 'build-ja.yml' },
 ];
 
@@ -446,14 +446,14 @@ const MESSAGES = {
 };
 
 const STORAGE_KEY = 'ffmpeg-builder-lang';
-const FALLBACK = 'zh-CN';
+const FALLBACK = 'en';
 let current = FALLBACK;
 
 function isSupported(id) {
   return LANGUAGES.some((language) => language.id === id);
 }
 
-// Saved choice first, then the browser languages, then Simplified Chinese.
+// Saved choice first, then the browser languages, then English.
 export function detectLanguage() {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);

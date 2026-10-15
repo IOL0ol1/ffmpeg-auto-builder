@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FFmpeg 在线自动编译</title>
+  <title>FFmpeg Online Builder</title>
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
@@ -12,59 +12,59 @@
       <div class="hero-head">
         <p class="eyebrow">GitHub Pages + GitHub Actions</p>
         <label class="lang-switch">
-          <span class="visually-hidden" data-i18n="lang.label">语言</span>
+          <span class="visually-hidden" data-i18n="lang.label">Language</span>
           <select id="lang-select" data-i18n-aria-label="lang.label"></select>
         </label>
       </div>
-      <h1 data-i18n="page.title">FFmpeg 在线自动编译</h1>
+      <h1 data-i18n="page.title">FFmpeg Online Builder</h1>
       <dl class="repo-summary">
         <div>
-          <dt data-i18n="hero.repo">当前仓库</dt>
+          <dt data-i18n="hero.repo">Repository</dt>
           <dd id="detected-repo"></dd>
         </div>
         <div>
-          <dt data-i18n="hero.issues">Issues 功能</dt>
+          <dt data-i18n="hero.issues">Issues</dt>
           <dd id="issues-status"></dd>
         </div>
       </dl>
     </section>
 
     <section class="card">
-      <h2 data-i18n="form.title">提交编译任务</h2>
+      <h2 data-i18n="form.title">Submit a build</h2>
       <form id="build-form" class="build-form">
         <label>
-          <span data-i18n="form.source">FFmpeg Git 仓库地址</span>
+          <span data-i18n="form.source">FFmpeg Git repository</span>
           <input id="source-repository" name="sourceRepository" type="text" inputmode="url" value="https://github.com/FFmpeg/FFmpeg"
             data-i18n-placeholder="form.source.placeholder" required>
           <small data-i18n-html="form.source.help"></small>
         </label>
 
         <label>
-          <span data-i18n="form.ref">源码分支 / tag / commit（可选）</span>
+          <span data-i18n="form.ref">Branch / tag / commit (optional)</span>
           <input id="source-ref" name="sourceRef" type="text" data-i18n-placeholder="form.ref.placeholder">
-          <small data-i18n="form.ref.help"></small>
+          <small data-i18n="form.ref.help">Commits need the full 40-character SHA; leave empty to build the default branch HEAD.</small>
         </label>
 
         <div class="grid">
           <label>
-            <span data-i18n="form.platform">目标平台</span>
+            <span data-i18n="form.platform">Target platform</span>
             <select id="target-platform" name="targetPlatform">
               <option value="linux">Linux</option>
               <option value="macos">macOS</option>
               <option value="windows">Windows</option>
-              <option value="all" data-i18n="form.platform.all">全部平台（并行）</option>
+              <option value="all" data-i18n="form.platform.all">All platforms (parallel)</option>
             </select>
           </label>
 
           <label>
-            <span data-i18n="form.arch">目标指令集</span>
+            <span data-i18n="form.arch">Target architecture</span>
             <select id="target-arch" name="targetArch">
               <!-- populated dynamically based on selected platform -->
             </select>
           </label>
 
           <label>
-            <span data-i18n="form.package">打包格式</span>
+            <span data-i18n="form.package">Package format</span>
             <select id="package-format" name="packageFormat">
               <option value="tar.gz">tar.gz</option>
               <option value="zip">zip</option>
@@ -73,7 +73,7 @@
         </div>
 
         <fieldset class="config">
-          <legend data-i18n="config.legend">编译参数</legend>
+          <legend data-i18n="config.legend">Build options</legend>
 
           <div id="segments" class="segments"></div>
 
@@ -82,7 +82,7 @@
 
           <div class="choice-group">
             <div class="group-head">
-              <span class="group-title" data-i18n="config.components">组件</span>
+              <span class="group-title" data-i18n="config.components">Components</span>
               <div id="component-mode" class="segmented" role="radiogroup" data-i18n-aria-label="config.components"></div>
             </div>
             <small id="component-mode-hint" class="muted"></small>
@@ -90,9 +90,9 @@
           </div>
 
           <details class="advanced">
-            <summary data-i18n="config.advanced">高级：自定义参数</summary>
+            <summary data-i18n="config.advanced">Advanced: custom flags</summary>
             <label>
-              <span data-i18n="config.custom.label">自定义参数（追加在最后，可覆盖上面的选项）</span>
+              <span data-i18n="config.custom.label">Custom flags (appended last; they override the options above)</span>
               <textarea id="custom-options" rows="3" spellcheck="false" data-i18n-placeholder="config.custom.placeholder"></textarea>
               <small data-i18n-html="config.custom.help"></small>
             </label>
@@ -100,10 +100,10 @@
 
           <div class="preview">
             <div class="preview-head">
-              <span class="group-title" data-i18n="config.preview">最终 configure 参数</span>
+              <span class="group-title" data-i18n="config.preview">Final configure flags</span>
               <div class="preview-actions">
-                <button id="copy-config" type="button" class="secondary small" data-i18n="config.copy">复制</button>
-                <button id="reset-config" type="button" class="secondary small" data-i18n="config.reset">恢复默认</button>
+                <button id="copy-config" type="button" class="secondary small" data-i18n="config.copy">Copy</button>
+                <button id="reset-config" type="button" class="secondary small" data-i18n="config.reset">Reset</button>
               </div>
             </div>
             <code id="configure-preview"></code>
@@ -112,7 +112,7 @@
         </fieldset>
 
         <div class="actions">
-          <button type="submit" data-i18n="form.submit">在 GitHub 上提交编译</button>
+          <button type="submit" data-i18n="form.submit">Submit on GitHub</button>
         </div>
         <p id="form-message" class="form-message"></p>
       </form>
@@ -120,10 +120,10 @@
 
     <section class="card">
       <div class="section-head">
-        <h2 data-i18n="builds.title">编译记录</h2>
-        <button id="refresh-builds" type="button" class="secondary" data-i18n="builds.refresh">刷新</button>
+        <h2 data-i18n="builds.title">Builds</h2>
+        <button id="refresh-builds" type="button" class="secondary" data-i18n="builds.refresh">Refresh</button>
       </div>
-      <p class="lead muted" data-i18n="builds.lead">最近 20 个编译 Issue。有任务进行中时每 10 分钟自动刷新一次。</p>
+      <p class="lead muted" data-i18n="builds.lead">The latest 20 build issues. Refreshes every 10 minutes while a build is running.</p>
       <div id="build-list" class="run-list empty"></div>
     </section>
   </main>
