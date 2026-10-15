@@ -1,7 +1,7 @@
 import {
   COMPONENT_GROUPS, SEGMENTS, TOGGLE_GROUPS,
-  buildConfigure, componentStatus, defaultConfig, effectiveComponents, effectiveSegmentValue, normalizeConfig,
-  requiresGpl, sanitizeCustom, segmentOptionStatus, setToggle,
+  buildConfigure, componentStatus, defaultConfig, effectiveComponents, effectiveSegmentValue, effectiveToggle,
+  normalizeConfig, requiresGpl, sanitizeCustom, segmentOptionStatus, setToggle, toggleStatus,
 } from './configure.js';
 import {
   LANGUAGES, detectLanguage, getLanguage, setLanguage, t, translateStatic,
@@ -181,7 +181,7 @@ function updateArchOptions() {
 // unavailable in the controls themselves instead of being validated afterwards.
 
 function configContext() {
-  return { platform: targetPlatformSelect.value, packageFormat: packageFormatSelect.value };
+  return { platform: targetPlatformSelect.value, arch: targetArchSelect.value, packageFormat: packageFormatSelect.value };
 }
 
 function loadSavedConfig() {
@@ -297,7 +297,12 @@ function renderConfigControls() {
     group.items.forEach((item) => {
       const chip = makeChip(t(`toggle.${item.id}`), (checked) => setToggleFromUI(item, checked));
       chip.dataset.toggle = item.id;
-      chip.title = `${t(`toggle.${item.id}.hint`)}\n${[...(item.on || []), ...(item.off || [])].join(' / ')}`;
+      if (item.gpl) {
+        const badge = document.createElement('span');
+        badge.className = 'badge';
+        badge.textContent = 'GPL';
+        chip.appendChild(badge);
+      }
       chips.appendChild(chip);
     });
     wrapper.append(title, chips);
@@ -383,8 +388,18 @@ function syncConfigUI() {
   });
   packageHintNode.textContent = context.packageFormat === 'nuget' ? t('form.package.nugetHint') : '';
 
+  const toggleItems = TOGGLE_GROUPS.flatMap((group) => group.items);
   toggleGroupsNode.querySelectorAll('[data-toggle]').forEach((chip) => {
-    chip.querySelector('input').checked = Boolean(config.toggles[chip.dataset.toggle]);
+    const id = chip.dataset.toggle;
+    const item = toggleItems.find((entry) => entry.id === id);
+    const status = toggleStatus(config, context, id);
+    const input = chip.querySelector('input');
+    input.checked = effectiveToggle(config, context, id);
+    input.disabled = !status.available;
+    chip.classList.toggle('unavailable', !status.available);
+    chip.title = status.available
+      ? `${t(`toggle.${id}.hint`)}\n${[...(item.on || []), ...(item.off || [])].join(' / ')}`
+      : statusReason(status);
   });
 
   syncSegmented(componentModeNode, config.componentMode);
@@ -739,6 +754,7 @@ targetPlatformSelect.addEventListener('change', () => {
   syncConfigUI(); // platform-specific components (e.g. https) may change availability
 });
 packageFormatSelect.addEventListener('change', syncConfigUI); // NuGet allows shared linking only
+targetArchSelect.addEventListener('change', syncConfigUI); // third-party libraries depend on the target
 
 state.config = loadSavedConfig();
 applyLanguage(detectLanguage());

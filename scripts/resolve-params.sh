@@ -99,18 +99,19 @@ validate_release_tag "$release_tag"
 
 # ── Build matrix ─────────────────────────────────────────────────────────────
 
-mingw64_pkgs="make diffutils zip mingw-w64-x86_64-toolchain mingw-w64-x86_64-pkgconf mingw-w64-x86_64-nasm mingw-w64-x86_64-ccache"
-mingw32_pkgs="make diffutils zip mingw-w64-i686-toolchain mingw-w64-i686-pkgconf mingw-w64-i686-nasm mingw-w64-i686-ccache"
-clangarm64_pkgs="make diffutils zip mingw-w64-clang-aarch64-toolchain mingw-w64-clang-aarch64-pkgconf mingw-w64-clang-aarch64-ccache"
+# Targets with third-party libraries (deps/*.sh, see scripts/toolchain.sh): Linux builds run
+# in a manylinux_2_28 container for glibc 2.28 compatibility; Windows is cross-compiled
+# with llvm-mingw on Linux. Linux x86 / armv7 build FFmpeg on its own.
+manylinux_x64="quay.io/pypa/manylinux_2_28_x86_64"
+manylinux_arm64="quay.io/pypa/manylinux_2_28_aarch64"
 
 entries=()
 needs_lipo="false"
 
-# add <platform> <runner> <arch> [cross_prefix] [msystem] [msys2_packages] [universal_slice]
+# add <platform> <runner> <arch> <deps:true|false> [container] [cross_prefix] [universal_slice]
 # All values are constants from this script, so plain string formatting yields valid JSON.
 add() {
-  entries+=("$(printf '{"platform":"%s","os":"%s","arch":"%s","cross_prefix":"%s","msystem":"%s","msys2_packages":"%s","universal_slice":"%s"}' \
-    "$1" "$2" "$3" "${4:-}" "${5:-}" "${6:-}" "${7:-}")")
+  entries+=("$(printf '{"platform":"%s","os":"%s","arch":"%s","deps":"%s","container":"%s","cross_prefix":"%s","universal_slice":"%s"}'     "$1" "$2" "$3" "$4" "${5:-}" "${6:-}" "${7:-}")")
 }
 
 if [[ "$target_platform" == "all" ]]; then
@@ -121,21 +122,21 @@ fi
 
 for p in "${platforms[@]}"; do
   case "$p/$target_arch" in
-    linux/x86_64 | linux/universal) add linux ubuntu-latest x86_64 ;;
-    linux/x86)       add linux ubuntu-latest x86 i686-linux-gnu- ;;
-    linux/arm64)     add linux ubuntu-24.04-arm arm64 ;;
-    linux/armv7)     add linux ubuntu-latest armv7 arm-linux-gnueabihf- ;;
-    macos/x86_64)    add macos macos-15-intel x86_64 ;;
-    macos/arm64)     add macos macos-15 arm64 ;;
+    linux/x86_64 | linux/universal) add linux ubuntu-latest x86_64 true "$manylinux_x64" ;;
+    linux/arm64)     add linux ubuntu-24.04-arm arm64 true "$manylinux_arm64" ;;
+    linux/x86)       add linux ubuntu-latest x86 false "" i686-linux-gnu- ;;
+    linux/armv7)     add linux ubuntu-latest armv7 false "" arm-linux-gnueabihf- ;;
+    macos/x86_64)    add macos macos-15-intel x86_64 true ;;
+    macos/arm64)     add macos macos-15 arm64 true ;;
     macos/universal)
-      add macos macos-15-intel x86_64 "" "" "" true
-      add macos macos-15 arm64 "" "" "" true
+      add macos macos-15-intel x86_64 true "" "" true
+      add macos macos-15 arm64 true "" "" true
       # NuGet uses the two slices as osx-x64 / osx-arm64 instead of a merged binary.
       [[ "$package_format" == "nuget" ]] || needs_lipo="true"
       ;;
-    windows/x86_64 | windows/universal) add windows windows-latest x86_64 "" MINGW64 "$mingw64_pkgs" ;;
-    windows/x86)     add windows windows-latest x86 "" MINGW32 "$mingw32_pkgs" ;;
-    windows/arm64)   add windows windows-11-arm arm64 "" CLANGARM64 "$clangarm64_pkgs" ;;
+    windows/x86_64 | windows/universal) add windows ubuntu-latest x86_64 true ;;
+    windows/x86)     add windows ubuntu-latest x86 true ;;
+    windows/arm64)   add windows ubuntu-latest arm64 true ;;
     *) echo "::warning::Skipping unsupported combination $p/$target_arch" ;;
   esac
 done

@@ -21,6 +21,19 @@ source_dir="${SOURCE_DIR:-$repo_root/ffmpeg-src}"
 # Flags injected here are prepended so that any user-supplied flags (which come later) win.
 injected_args=()
 
+# Targets with third-party libraries: toolchain, cross-compilation and pkg-config setup
+# shared with scripts/build-deps.sh (libraries in $DEPS_PREFIX, linked statically).
+if [[ -n "${DEPS_PREFIX:-}" ]]; then
+  source "$script_dir/toolchain.sh"
+  setup_toolchain
+  injected_args+=("${FFMPEG_TOOLCHAIN_ARGS[@]}")
+  # Static C++ libraries (x265, zimg, HarfBuzz, ...) need the C++ runtime at link time.
+  case "$TARGET_PLATFORM" in
+    linux) injected_args+=("--extra-libs=-lstdc++") ;;
+    *)     injected_args+=("--extra-libs=-lc++") ;;
+  esac
+fi
+
 # Cross-compilation flags for Linux when a cross-prefix is provided.
 if [[ "$TARGET_PLATFORM" == "linux" && -n "${CROSS_PREFIX:-}" ]]; then
   case "$TARGET_ARCH" in
@@ -38,12 +51,14 @@ if [[ "$TARGET_PLATFORM" == "linux" && -n "${CROSS_PREFIX:-}" ]]; then
 fi
 
 # Route compilation through ccache when available.
+if [[ -n "${DEPS_PREFIX:-}" ]]; then
+  base_cc="$CC"
+elif [[ "$TARGET_PLATFORM" == "macos" ]]; then
+  base_cc="clang"
+else
+  base_cc="${CROSS_PREFIX:-}gcc"
+fi
 if command -v ccache >/dev/null 2>&1; then
-  if [[ "$TARGET_PLATFORM" == "macos" || "${MSYSTEM:-}" == CLANG* ]]; then
-    base_cc="clang"
-  else
-    base_cc="${CROSS_PREFIX:-}gcc"
-  fi
   injected_args+=("--cc=ccache ${base_cc}")
   ccache --zero-stats >/dev/null 2>&1 || true
 fi
@@ -51,10 +66,6 @@ fi
 SANITIZED_CONFIGURE_ARGS=("${injected_args[@]}" "${SANITIZED_CONFIGURE_ARGS[@]}")
 
 work_root="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/ffmpeg-build-${RELEASE_TAG}"
-if command -v cygpath >/dev/null 2>&1; then
-  # Windows runners report RUNNER_TEMP as "D:\a\_temp"; configure needs a POSIX path.
-  work_root="$(cygpath -u "$work_root")"
-fi
 install_root="$work_root/install"
 dist_root="$repo_root/dist"
 package_root="$dist_root/packages"
@@ -137,19 +148,18 @@ fix_macos_install_names() {
   done
 }
 
-# Copy MinGW runtime DLLs (libwinpthread, libgcc, ...) next to the executables.
+# Copy toolchain runtime DLLs (libc++, libunwind, ...) that the binaries still import next
+# to them. The runtime is linked statically, so normally there is nothing to copy.
 bundle_windows_runtime() {
-  [[ -n "${MINGW_PREFIX:-}" ]] || return 0
+  [[ -n "${TOOLCHAIN_BIN:-}" ]] || return 0
 
   local f dll
   for f in "$install_root"/bin/*.exe "$install_root"/bin/*.dll; do
     while IFS= read -r dll; do
-      case "$dll" in
-        "$MINGW_PREFIX"/bin/*)
-          [[ -e "$install_root/bin/$(basename "$dll")" ]] || cp "$dll" "$install_root/bin/"
-          ;;
-      esac
-    done < <(ldd "$f" 2>/dev/null | awk '{ print $3 }' || true)
+      if [[ -f "$TOOLCHAIN_BIN/$dll" && ! -e "$install_root/bin/$dll" ]]; then
+        cp "$TOOLCHAIN_BIN/$dll" "$install_root/bin/"
+      fi
+    done < <(llvm-objdump -p "$f" 2>/dev/null | awk '/DLL Name:/ { print $3 }' || true)
   done
 }
 
@@ -160,13 +170,10 @@ case "$TARGET_PLATFORM" in
   windows) bundle_windows_runtime ;;
 esac
 
-# ── Smoke test (native builds only) ──────────────────────────────────────────
+# ── Smoke test (native builds only; Windows is cross-compiled) ───────────────
 
 ffmpeg_bin="$install_root/bin/ffmpeg"
-if [[ "$TARGET_PLATFORM" == "windows" ]]; then
-  ffmpeg_bin+=".exe"
-fi
-if [[ -z "${CROSS_PREFIX:-}" && -x "$ffmpeg_bin" ]]; then
+if [[ -z "${CROSS_PREFIX:-}" && "$TARGET_PLATFORM" != "windows" && -x "$ffmpeg_bin" ]]; then
   version_output="$("$ffmpeg_bin" -hide_banner -version)" || fail "Smoke test failed: $ffmpeg_bin -version"
   printf 'Smoke test OK: %s\n' "${version_output%%$'\n'*}"
 fi

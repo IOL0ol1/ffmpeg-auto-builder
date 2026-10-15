@@ -144,7 +144,9 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 180
+    # Linux targets with third-party libraries build in a manylinux_2_28 container.
+    container: ${{ matrix.container }}
+    timeout-minutes: 240
     env:
       SOURCE_REPOSITORY: ${{ needs.setup.outputs.source_repository }}
       SOURCE_REF: ${{ needs.setup.outputs.source_ref }}
@@ -155,7 +157,6 @@ jobs:
       CONFIGURE_OPTIONS: ${{ needs.setup.outputs.configure_options }}
       RELEASE_TAG: ${{ needs.setup.outputs.release_tag }}
       MACOSX_DEPLOYMENT_TARGET: '11.0'
-      CCACHE_DIR: ${{ github.workspace }}/.ccache
       CCACHE_MAXSIZE: 500M
     steps:
       - name: Disable CRLF conversion
@@ -177,36 +178,52 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      - name: Install build tools
+        shell: bash
+        run: ./scripts/install-deps.sh
+
+      # Paths come from $GITHUB_WORKSPACE, which is correct inside the container too.
+      - name: Locate build directories
+        id: dirs
+        shell: bash
+        run: |
+          echo "CCACHE_DIR=$GITHUB_WORKSPACE/.ccache" >> "$GITHUB_ENV"
+          if [[ "${{ matrix.deps }}" == "true" ]]; then
+            echo "DEPS_PREFIX=$GITHUB_WORKSPACE/.deps/prefix" >> "$GITHUB_ENV"
+          fi
+          echo "toolchain=${{ hashFiles('scripts/build-deps.sh', 'scripts/toolchain.sh', 'scripts/install-deps.sh') }}" >> "$GITHUB_OUTPUT"
+
+      # Same cache entries as the build-deps workflow, which can warm them ahead of time.
+      - name: Restore third-party libraries
+        if: matrix.deps == 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: .deps/prefix
+          key: deps-v2-${{ matrix.platform }}-${{ matrix.arch }}-${{ steps.dirs.outputs.toolchain }}-${{ github.run_id }}
+          restore-keys: deps-v2-${{ matrix.platform }}-${{ matrix.arch }}-${{ steps.dirs.outputs.toolchain }}-
+
+      - name: Build third-party libraries
+        id: deps
+        if: matrix.deps == 'true'
+        shell: bash
+        run: ./scripts/build-deps.sh
+
+      - name: Save third-party libraries
+        if: always() && steps.deps.outputs.changed == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .deps/prefix
+          key: deps-v2-${{ matrix.platform }}-${{ matrix.arch }}-${{ steps.dirs.outputs.toolchain }}-${{ github.run_id }}-${{ github.run_attempt }}
+
       - name: Restore ccache
         uses: actions/cache@v4
         with:
           path: .ccache
-          key: ccache-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.run_id }}
-          restore-keys: ccache-${{ matrix.platform }}-${{ matrix.arch }}-
-
-      - name: Install dependencies
-        if: matrix.platform != 'windows'
-        shell: bash
-        run: ./scripts/install-deps.sh
-
-      - name: Set up MSYS2
-        if: matrix.platform == 'windows'
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: ${{ matrix.msystem }}
-          update: true
-          install: ${{ matrix.msys2_packages }}
+          key: ccache-v2-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.run_id }}
+          restore-keys: ccache-v2-${{ matrix.platform }}-${{ matrix.arch }}-
 
       - name: Build and package FFmpeg
-        if: matrix.platform != 'windows'
         shell: bash
-        env:
-          SOURCE_COMMIT: ${{ steps.source.outputs.commit }}
-        run: ./scripts/build-ffmpeg.sh
-
-      - name: Build and package FFmpeg (Windows)
-        if: matrix.platform == 'windows'
-        shell: msys2 {0}
         env:
           SOURCE_COMMIT: ${{ steps.source.outputs.commit }}
         run: ./scripts/build-ffmpeg.sh

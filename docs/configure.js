@@ -63,7 +63,39 @@ export const TOGGLE_GROUPS = [
       { id: 'pic', default: false, on: ['--enable-pic'] },
     ],
   },
+  {
+    // Built from source by deps/*.sh and linked statically (see scripts/build-deps.sh).
+    id: 'libraries',
+    items: [
+      { id: 'x264', default: true, on: ['--enable-libx264'], requiresDeps: true, gpl: true },
+      { id: 'x265', default: true, on: ['--enable-libx265'], requiresDeps: true, gpl: true },
+      { id: 'libvpx', default: true, on: ['--enable-libvpx'], requiresDeps: true },
+      { id: 'dav1d', default: true, on: ['--enable-libdav1d'], requiresDeps: true },
+      { id: 'svtav1', default: true, on: ['--enable-libsvtav1'], requiresDeps: true, excludedTargets: ['windows/x86'] },
+      { id: 'aom', default: true, on: ['--enable-libaom'], requiresDeps: true },
+      { id: 'opus', default: true, on: ['--enable-libopus'], requiresDeps: true },
+      { id: 'mp3lame', default: true, on: ['--enable-libmp3lame'], requiresDeps: true },
+      { id: 'vorbis', default: true, on: ['--enable-libvorbis'], requiresDeps: true },
+      { id: 'webp', default: true, on: ['--enable-libwebp'], requiresDeps: true },
+      { id: 'zimg', default: true, on: ['--enable-libzimg'], requiresDeps: true },
+      { id: 'soxr', default: true, on: ['--enable-libsoxr'], requiresDeps: true },
+      {
+        id: 'libass',
+        default: true,
+        on: ['--enable-libass', '--enable-libfreetype', '--enable-libharfbuzz', '--enable-libfribidi'],
+        requiresDeps: true,
+      },
+    ],
+  },
 ];
+
+// Targets whose builds include the third-party libraries (mirrors scripts/toolchain.sh).
+const DEPS_TARGETS = new Set([
+  'linux/x86_64', 'linux/arm64', 'linux/universal',
+  'macos/x86_64', 'macos/arm64', 'macos/universal',
+  'windows/x86_64', 'windows/x86', 'windows/arm64', 'windows/universal',
+  'all/x86_64', 'all/arm64', 'all/universal',
+]);
 
 const TOGGLES = TOGGLE_GROUPS.flatMap((group) => group.items);
 const toggleById = (id) => TOGGLES.find((item) => item.id === id);
@@ -225,6 +257,21 @@ export function effectiveComponents(config, context, groupId) {
   return group.items.filter((name) => selected.has(name) && componentStatus(config, context, groupId, name).available);
 }
 
+// context: { platform, arch, packageFormat }. `reason` is translated as reason.<code>.
+export function toggleStatus(config, context, id) {
+  const item = toggleById(id);
+  const target = `${context.platform}/${context.arch}`;
+  if (item.requiresDeps && context.platform && !DEPS_TARGETS.has(target)) return { available: false, reason: 'noDeps' };
+  if (item.excludedTargets?.includes(target)) return { available: false, reason: 'target' };
+  if (item.gpl && config.license !== 'gpl') return { available: false, reason: 'gpl' };
+  return { available: true };
+}
+
+// An unavailable toggle counts as off; the stored choice comes back once it is available.
+export function effectiveToggle(config, context, id) {
+  return toggleStatus(config, context, id).available && Boolean(config.toggles[id]);
+}
+
 // Turn a toggle on or off and propagate dependencies; returns the ids that changed.
 export function setToggle(config, id, value) {
   const toggles = { ...config.toggles };
@@ -275,7 +322,7 @@ export function buildConfigure(config, context = {}) {
       const value = effectiveSegmentValue(config, context, segment.id);
       return segment.options.find((option) => option.id === value)?.flags || [];
     }),
-    ...TOGGLES.flatMap((item) => (config.toggles[item.id] ? item.on : item.off) || []),
+    ...TOGGLES.flatMap((item) => (effectiveToggle(config, context, item.id) ? item.on : item.off) || []),
     ...(config.componentMode === 'slim'
       ? ['--disable-everything', ...COMPONENT_GROUPS
         .map((group) => [group, effectiveComponents(config, context, group.id)])
@@ -286,7 +333,7 @@ export function buildConfigure(config, context = {}) {
   ]);
 
   const notes = [];
-  if (!config.toggles.ffmpeg && !config.toggles.ffprobe) notes.push('noPrograms');
+  if (!effectiveToggle(config, context, 'ffmpeg') && !effectiveToggle(config, context, 'ffprobe')) notes.push('noPrograms');
   if (config.componentMode === 'slim'
     && !effectiveComponents(config, context, 'decoder').length && !effectiveComponents(config, context, 'encoder').length) {
     notes.push('noCodecs');
