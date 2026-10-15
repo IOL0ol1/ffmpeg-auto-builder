@@ -74,7 +74,11 @@ rm -rf "$work_root" "$dist_root"
 mkdir -p "$install_root" "$package_root"
 
 pushd "$source_dir" >/dev/null
-./configure --prefix="$install_root" "${SANITIZED_CONFIGURE_ARGS[@]}"
+# configure only reports which check failed; the reason is in ffbuild/config.log.
+./configure --prefix="$install_root" "${SANITIZED_CONFIGURE_ARGS[@]}" || {
+  tail -n 60 ffbuild/config.log
+  exit 1
+}
 make -j"$(cpu_count)"
 make install
 popd >/dev/null
