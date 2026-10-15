@@ -2,7 +2,7 @@
 # Toolchain setup shared by scripts/build-deps.sh and scripts/build-ffmpeg.sh. Every target
 # gets the third-party libraries:
 #   linux/x86_64, linux/arm64    native, inside a manylinux_2_28 container (glibc 2.28)
-#   linux/x86, linux/armv7       cross-compiled inside a Debian 11 container (glibc 2.31)
+#   linux/x86, linux/armv7       cross-compiled inside an Ubuntu 20.04 container (glibc 2.31)
 #   macos/x86_64, macos/arm64    native on a runner of that architecture
 #   windows/x86_64|x86|arm64     cross-compiled with llvm-mingw ($LLVM_MINGW) on Linux
 #
@@ -96,11 +96,11 @@ setup_toolchain() {
           triple=i686-linux-gnu cpu_family=x86 cpu=i686 ffmpeg_arch=x86
           # Any 32-bit x86 CPU still in use has SSE2.
           export CFLAGS="$CFLAGS -msse2 -mfpmath=sse" CXXFLAGS="$CXXFLAGS -msse2 -mfpmath=sse"
-          # The Debian container has the i386 C runtime installed to run the result.
+          # The Ubuntu container has the i386 C runtime installed to run the result.
           TARGET_RUNNER=""
           ;;
         armv7)
-          # Debian armhf baseline (ARMv7 + VFPv3-D16); NEON is detected at run time.
+          # armhf baseline (ARMv7 + VFPv3-D16); FFmpeg detects NEON at run time.
           triple=arm-linux-gnueabihf cpu_family=arm cpu=armv7 ffmpeg_arch=arm
           TARGET_RUNNER="qemu-arm -L /usr/$triple"
           ;;

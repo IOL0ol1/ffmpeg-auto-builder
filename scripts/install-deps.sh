@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Install the build tools for one target. Windows targets are cross-compiled on Linux with
-# llvm-mingw; linux/x86_64 and linux/arm64 run inside a manylinux_2_28 container.
+# llvm-mingw; linux/x86_64 and linux/arm64 run inside a manylinux_2_28 container, linux/x86 and
+# linux/armv7 inside Ubuntu 20.04.
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -11,6 +12,8 @@ require_env TARGET_ARCH
 
 LLVM_MINGW_VERSION=20261006
 LLVM_MINGW_SHA256=5f9c6ed95b2d4bdb2869a488c5fd5857fbdabcf288a0aa3eb1da43f6a08d8ab4
+NASM_VERSION=2.16.03
+NASM_SHA256=1412a1c760bbd05db026b6c0d1657affd6631cd0a63cddb6f73cc6d4aa616148
 
 # Export a variable to later workflow steps (and this shell).
 export_env() {
@@ -55,9 +58,16 @@ case "$TARGET_PLATFORM" in
       esac
       apt-get update
       apt-get install -y --no-install-recommends \
-        build-essential pkg-config nasm zip unzip xz-utils bzip2 automake autoconf libtool make \
+        build-essential pkg-config zip unzip xz-utils bzip2 automake autoconf libtool make \
         git ca-certificates curl patchelf ccache python3-pip "${cross[@]}"
       install_python_build_tools
+      # The distribution's NASM 2.14 cannot assemble FFmpeg's 32-bit x86 code.
+      archive=/tmp/nasm.tar.xz
+      curl -fsSL --retry 3 -o "$archive" \
+        "https://www.nasm.us/pub/nasm/releasebuilds/${NASM_VERSION}/nasm-${NASM_VERSION}.tar.xz"
+      echo "${NASM_SHA256}  ${archive}" | sha256sum -c - >/dev/null || fail "NASM checksum mismatch"
+      tar -xf "$archive" -C /tmp
+      (cd "/tmp/nasm-${NASM_VERSION}" && ./configure --prefix=/usr/local >/dev/null && make -j"$(cpu_count)" >/dev/null && make install >/dev/null)
       # The distribution's CMake 3.16 is older than some libraries require.
       python3 -m pip install --quiet --user --upgrade cmake
     fi
