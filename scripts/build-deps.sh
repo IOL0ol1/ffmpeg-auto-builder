@@ -85,6 +85,13 @@ meson_build() {
 
 target_key="${TARGET_PLATFORM}/${TARGET_ARCH}"
 built=()
+
+# Tell the workflow whether the prefix changed, also when a later library fails, so the
+# libraries finished so far can be cached and skipped on the next run.
+report_changes() {
+  [[ -z "${GITHUB_OUTPUT:-}" ]] || echo "changed=$([[ ${#built[@]} -gt 0 ]] && echo true || echo false)" >>"$GITHUB_OUTPUT"
+}
+trap report_changes EXIT
 for dep in "$repo_root"/deps/[0-9]*.sh; do
   DEP_NAME="$(basename "$dep" .sh)"
   DEP_NAME="${DEP_NAME#*-}"
@@ -94,7 +101,8 @@ for dep in "$repo_root"/deps/[0-9]*.sh; do
 
   [[ " $DEP_PLATFORMS " == *" $target_key "* ]] || { echo "Skipping $DEP_NAME on $target_key"; continue; }
 
-  stamp="$DEPS_PREFIX/.stamps/${DEP_NAME}-${DEP_VERSION}"
+  # The stamp covers the recipe itself, so editing deps/<name>.sh rebuilds that library.
+  stamp="$DEPS_PREFIX/.stamps/${DEP_NAME}-${DEP_VERSION}-$(sha256sum "$dep" | cut -c1-12)"
   if [[ -f "$stamp" ]]; then
     echo "Up to date: $DEP_NAME $DEP_VERSION"
     continue

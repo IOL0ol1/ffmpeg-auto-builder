@@ -46,24 +46,25 @@ jobs:
           echo "toolchain=${{ hashFiles('scripts/build-deps.sh', 'scripts/toolchain.sh', 'scripts/install-deps.sh') }}" >> "$GITHUB_OUTPUT"
 
       - name: Restore dependencies
-        id: restore
         uses: actions/cache/restore@v4
         with:
           path: .deps/prefix
-          key: deps-v1-${{ matrix.platform }}-${{ matrix.arch }}-${{ steps.prefix.outputs.toolchain }}-${{ hashFiles('deps/**') }}
-          restore-keys: deps-v1-${{ matrix.platform }}-${{ matrix.arch }}-${{ steps.prefix.outputs.toolchain }}-
+          # Newest prefix built with this toolchain; per-library stamps skip what is current.
+          key: deps-v2-${{ matrix.platform }}-${{ matrix.arch }}-${{ steps.prefix.outputs.toolchain }}-${{ github.run_id }}
+          restore-keys: deps-v2-${{ matrix.platform }}-${{ matrix.arch }}-${{ steps.prefix.outputs.toolchain }}-
 
       - name: Build dependencies
-        if: steps.restore.outputs.cache-hit != 'true'
+        id: build
         shell: bash
         run: ./scripts/build-deps.sh
 
+      # Saved even when a later library fails, so finished ones are reused next time.
       - name: Save dependencies
-        if: steps.restore.outputs.cache-hit != 'true'
+        if: always() && steps.build.outputs.changed == 'true'
         uses: actions/cache/save@v4
         with:
           path: .deps/prefix
-          key: deps-v1-${{ matrix.platform }}-${{ matrix.arch }}-${{ steps.prefix.outputs.toolchain }}-${{ hashFiles('deps/**') }}
+          key: deps-v2-${{ matrix.platform }}-${{ matrix.arch }}-${{ steps.prefix.outputs.toolchain }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: List libraries
         shell: bash
