@@ -28,11 +28,16 @@ if [[ -n "${DEPS_PREFIX:-}" ]]; then
   setup_toolchain
   injected_args+=("${FFMPEG_TOOLCHAIN_ARGS[@]}")
   # Static C++ libraries (x265, zimg, HarfBuzz, ...) need the C++ runtime at link time, and
-  # libraries without pkg-config files (soxr) need libm on Linux.
+  # glibc 2.28 keeps libm and libpthread separate, and soxr / x265 do not list them.
   case "$TARGET_PLATFORM" in
-    linux) injected_args+=("--extra-libs=-lstdc++" "--extra-libs=-lm") ;;
+    linux) injected_args+=("--extra-libs=-lstdc++" "--extra-libs=-lm" "--extra-libs=-lpthread") ;;
     *)     injected_args+=("--extra-libs=-lc++") ;;
   esac
+  # On Intel Macs Homebrew lives in /usr/local, which the compiler searches by default, so
+  # link-test autodetection would pick up its liblzma / libX11 and tie the binaries to it.
+  if [[ "$TARGET_PLATFORM" == "macos" ]]; then
+    injected_args+=("--disable-lzma" "--disable-xlib")
+  fi
 fi
 
 # Cross-compilation flags for Linux when a cross-prefix is provided.
