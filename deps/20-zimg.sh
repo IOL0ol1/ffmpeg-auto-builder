@@ -8,6 +8,8 @@ dep_build() {
   # zimg.cpp relies on <exception> arriving transitively, which libc++ does not guarantee.
   { printf '#include <exception>\n'; cat src/zimg/api/zimg.cpp; } >zimg.cpp.tmp
   mv zimg.cpp.tmp src/zimg/api/zimg.cpp
+  # MinGW headers are lower case, which matters on case-sensitive build hosts.
+  sed -i.bak 's/<Windows.h>/<windows.h>/' src/zimg/common/arm/cpuinfo_arm.cpp
   ./autogen.sh
   autotools_build --disable-testapp --disable-example --disable-unit-test
 }
