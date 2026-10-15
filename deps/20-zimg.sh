@@ -11,5 +11,8 @@ dep_build() {
   # MinGW headers are lower case, which matters on case-sensitive build hosts.
   sed -i.bak 's/<Windows.h>/<windows.h>/' src/zimg/common/arm/cpuinfo_arm.cpp
   ./autogen.sh
-  autotools_build --disable-testapp --disable-example --disable-unit-test
+  # The ARM SIMD code needs NEON, which the armhf baseline does not guarantee.
+  local simd=()
+  [[ "$TARGET_ARCH" == "armv7" ]] && simd=(--disable-simd)
+  autotools_build --disable-testapp --disable-example --disable-unit-test ${simd[@]+"${simd[@]}"}
 }

@@ -12,9 +12,12 @@ dep_build() {
     -e 's/cmake_policy(SET CMP0054 OLD)/cmake_policy(SET CMP0054 NEW)/' \
     -e 's/STREQUAL "Clang"/MATCHES "Clang"/g' \
     CMakeLists.txt
-  # The assembly does not build with llvm-mingw for 32-bit x86 or ARM64 Windows.
-  local asm=ON
-  [[ "$TARGET_PLATFORM" == "windows" && "$TARGET_ARCH" != "x86_64" ]] && asm=OFF
+  # Assembly only on 64-bit targets; it does not build for 32-bit x86 / ARM or with
+  # llvm-mingw for ARM64 Windows.
+  local asm=OFF
+  case "$TARGET_PLATFORM/$TARGET_ARCH" in
+    */x86_64 | linux/arm64 | macos/arm64) asm=ON ;;
+  esac
   cmake_build -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
     -DENABLE_SHARED=OFF -DENABLE_CLI=OFF -DENABLE_ASSEMBLY="$asm"
   # x265 prefixes every implicit compiler library with -l; llvm-mingw reports

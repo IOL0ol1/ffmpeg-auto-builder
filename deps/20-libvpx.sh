@@ -9,6 +9,8 @@ dep_build() {
   case "$TARGET_PLATFORM/$TARGET_ARCH" in
     linux/x86_64)   target=x86_64-linux-gcc ;;
     linux/arm64)    target=arm64-linux-gcc ;;
+    linux/x86)      target=x86-linux-gcc ;;
+    linux/armv7)    target=armv7-linux-gcc ;;
     macos/x86_64)   target=x86_64-darwin20-gcc ;;
     macos/arm64)    target=arm64-darwin20-gcc ;;
     windows/x86_64) target=x86_64-win64-gcc ;;

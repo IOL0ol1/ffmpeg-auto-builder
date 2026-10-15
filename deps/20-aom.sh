@@ -6,14 +6,14 @@ DEP_SHA256=67bb54b245f33ed98600e08269e6139986e48114e14042474ddd8885801dfddc
 
 dep_build() {
   fetch_source
+  # Cross builds must name the target CPU; native builds detect it.
   local cpu=()
-  if [[ "$TARGET_PLATFORM" == "windows" ]]; then
-    case "$TARGET_ARCH" in
-      x86_64) cpu=(-DAOM_TARGET_CPU=x86_64) ;;
-      x86)    cpu=(-DAOM_TARGET_CPU=x86) ;;
-      arm64)  cpu=(-DAOM_TARGET_CPU=arm64) ;;
-    esac
-  fi
+  case "$TARGET_PLATFORM/$TARGET_ARCH" in
+    windows/x86_64)          cpu=(-DAOM_TARGET_CPU=x86_64) ;;
+    windows/x86 | linux/x86) cpu=(-DAOM_TARGET_CPU=x86) ;;
+    windows/arm64)           cpu=(-DAOM_TARGET_CPU=arm64) ;;
+    linux/armv7)             cpu=(-DAOM_TARGET_CPU=arm) ;;
+  esac
   cmake_build -DENABLE_DOCS=0 -DENABLE_EXAMPLES=0 -DENABLE_TESTS=0 -DENABLE_TOOLS=0 \
     ${cpu[@]+"${cpu[@]}"}
 }

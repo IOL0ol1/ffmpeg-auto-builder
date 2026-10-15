@@ -18,6 +18,8 @@ jobs:
         include:
           - { platform: linux, arch: x86_64, os: ubuntu-latest, container: 'quay.io/pypa/manylinux_2_28_x86_64' }
           - { platform: linux, arch: arm64, os: ubuntu-24.04-arm, container: 'quay.io/pypa/manylinux_2_28_aarch64' }
+          - { platform: linux, arch: x86, os: ubuntu-latest, container: 'ubuntu:20.04' }
+          - { platform: linux, arch: armv7, os: ubuntu-latest, container: 'ubuntu:20.04' }
           - { platform: macos, arch: x86_64, os: macos-15-intel, container: '' }
           - { platform: macos, arch: arm64, os: macos-15, container: '' }
           - { platform: windows, arch: x86_64, os: ubuntu-latest, container: '' }

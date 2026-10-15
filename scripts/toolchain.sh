@@ -1,22 +1,17 @@
 #!/usr/bin/env bash
-# Toolchain setup shared by scripts/build-deps.sh and scripts/build-ffmpeg.sh for the
-# targets that get third-party libraries:
+# Toolchain setup shared by scripts/build-deps.sh and scripts/build-ffmpeg.sh. Every target
+# gets the third-party libraries:
 #   linux/x86_64, linux/arm64    native, inside a manylinux_2_28 container (glibc 2.28)
+#   linux/x86, linux/armv7       cross-compiled inside a Debian 11 container (glibc 2.31)
 #   macos/x86_64, macos/arm64    native on a runner of that architecture
 #   windows/x86_64|x86|arm64     cross-compiled with llvm-mingw ($LLVM_MINGW) on Linux
 #
 # setup_toolchain exports CC/CXX/... and sets, for the build helpers and FFmpeg:
 #   AUTOTOOLS_HOST_ARGS, CMAKE_TOOLCHAIN_ARGS, MESON_CROSS_ARGS  (arrays)
 #   FFMPEG_TOOLCHAIN_ARGS                                         (array)
-#   TOOLCHAIN_BIN                                                 (windows: DLLs to bundle)
-
-# Targets that get third-party libraries; the others build FFmpeg on its own.
-deps_supported() {
-  case "${TARGET_PLATFORM}/${TARGET_ARCH}" in
-    linux/x86_64 | linux/arm64 | macos/x86_64 | macos/arm64 | windows/x86_64 | windows/x86 | windows/arm64) return 0 ;;
-    *) return 1 ;;
-  esac
-}
+#   TARGET_RUNNER   command prefix that runs target binaries on the build host, or
+#                   "none" when they cannot run there (Windows)
+#   TOOLCHAIN_BIN   windows: directory of the toolchain's runtime DLLs
 
 mingw_triple() {
   case "$TARGET_ARCH" in
@@ -25,6 +20,48 @@ mingw_triple() {
     arm64)  echo aarch64-w64-mingw32 ;;
     *)      fail "No MinGW triple for $TARGET_ARCH" ;;
   esac
+}
+
+# Write a CMake toolchain file and a Meson cross file for a cross target.
+# write_cross_files <system: Linux|Windows> <cpu_family> <cpu> <c> <c++> <ar> <strip> [windres] [find-root]
+write_cross_files() {
+  local system="$1" cpu_family="$2" cpu="$3" cc="$4" cxx="$5" ar="$6" strip="$7" windres="${8:-}" find_root="${9:-}"
+  local dir="$DEPS_PREFIX/../toolchain"
+  mkdir -p "$dir"
+
+  {
+    echo "set(CMAKE_SYSTEM_NAME $system)"
+    echo "set(CMAKE_SYSTEM_PROCESSOR $cpu)"
+    echo "set(CMAKE_C_COMPILER $cc)"
+    echo "set(CMAKE_CXX_COMPILER $cxx)"
+    echo "set(CMAKE_AR $(command -v "$ar"))"
+    echo "set(CMAKE_RANLIB $(command -v "$RANLIB"))"
+    [[ -z "$windres" ]] || echo "set(CMAKE_RC_COMPILER $windres)"
+    echo "set(CMAKE_FIND_ROOT_PATH $DEPS_PREFIX $find_root)"
+    echo "set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)"
+    echo "set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)"
+    echo "set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)"
+    echo "set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)"
+  } >"$dir/cross.cmake"
+
+  {
+    echo "[binaries]"
+    echo "c = '$cc'"
+    echo "cpp = '$cxx'"
+    echo "ar = '$ar'"
+    echo "strip = '$strip'"
+    [[ -z "$windres" ]] || echo "windres = '$windres'"
+    echo "pkg-config = 'pkg-config'"
+    echo
+    echo "[host_machine]"
+    echo "system = '$(echo "$system" | tr '[:upper:]' '[:lower:]')'"
+    echo "cpu_family = '$cpu_family'"
+    echo "cpu = '$cpu'"
+    echo "endian = 'little'"
+  } >"$dir/cross.meson"
+
+  CMAKE_TOOLCHAIN_ARGS=(-DCMAKE_TOOLCHAIN_FILE="$dir/cross.cmake")
+  MESON_CROSS_ARGS=(--cross-file="$dir/cross.meson")
 }
 
 setup_toolchain() {
@@ -36,6 +73,7 @@ setup_toolchain() {
   CMAKE_TOOLCHAIN_ARGS=()
   MESON_CROSS_ARGS=()
   FFMPEG_TOOLCHAIN_ARGS=()
+  TARGET_RUNNER=""
   TOOLCHAIN_BIN=""
 
   # Only look for libraries in the dependency prefix, never on the build host.
@@ -46,15 +84,47 @@ setup_toolchain() {
   export CXXFLAGS="-O2 -fPIC"
   export LDFLAGS="-L$DEPS_PREFIX/lib"
 
-  case "$TARGET_PLATFORM" in
-    linux)
+  case "$TARGET_PLATFORM/$TARGET_ARCH" in
+    linux/x86_64 | linux/arm64)
       export CC=gcc CXX=g++
       ;;
-    macos)
+
+    linux/x86 | linux/armv7)
+      local triple cpu_family cpu ffmpeg_arch
+      case "$TARGET_ARCH" in
+        x86)
+          triple=i686-linux-gnu cpu_family=x86 cpu=i686 ffmpeg_arch=x86
+          # Any 32-bit x86 CPU still in use has SSE2.
+          export CFLAGS="$CFLAGS -msse2 -mfpmath=sse" CXXFLAGS="$CXXFLAGS -msse2 -mfpmath=sse"
+          # The Debian container has the i386 C runtime installed to run the result.
+          TARGET_RUNNER=""
+          ;;
+        armv7)
+          # Debian armhf baseline (ARMv7 + VFPv3-D16); NEON is detected at run time.
+          triple=arm-linux-gnueabihf cpu_family=arm cpu=armv7 ffmpeg_arch=arm
+          TARGET_RUNNER="qemu-arm -L /usr/$triple"
+          ;;
+      esac
+      export CC="$triple-gcc" CXX="$triple-g++" AR="$triple-ar" RANLIB="$triple-ranlib"
+      export NM="$triple-nm" STRIP="$triple-strip"
+      AUTOTOOLS_HOST_ARGS=(--host="$triple")
+      write_cross_files Linux "$cpu_family" "$cpu" "$CC" "$CXX" "$AR" "$STRIP" "" "/usr/$triple"
+      FFMPEG_TOOLCHAIN_ARGS=(
+        "--target-os=linux"
+        "--arch=$ffmpeg_arch"
+        "--enable-cross-compile"
+        "--cross-prefix=$triple-"
+        "--cc=$CC"
+        "--cxx=$CXX"
+      )
+      ;;
+
+    macos/*)
       export CC=clang CXX=clang++
       export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-11.0}"
       ;;
-    windows)
+
+    windows/*)
       require_env LLVM_MINGW
       local triple cpu_family cpu ffmpeg_arch
       triple="$(mingw_triple)"
@@ -74,41 +144,9 @@ setup_toolchain() {
       fi
       export LDFLAGS="-L$DEPS_PREFIX/lib -static"
       TOOLCHAIN_BIN="$LLVM_MINGW/$triple/bin"
+      TARGET_RUNNER="none"
       AUTOTOOLS_HOST_ARGS=(--host="$triple")
-
-      local toolchain_dir="$DEPS_PREFIX/../toolchain"
-      mkdir -p "$toolchain_dir"
-      cat >"$toolchain_dir/windows.cmake" <<EOF
-set(CMAKE_SYSTEM_NAME Windows)
-set(CMAKE_SYSTEM_PROCESSOR $cpu)
-set(CMAKE_C_COMPILER $triple-clang)
-set(CMAKE_CXX_COMPILER $triple-clang++)
-set(CMAKE_RC_COMPILER $triple-windres)
-set(CMAKE_AR $LLVM_MINGW/bin/$triple-ar)
-set(CMAKE_RANLIB $LLVM_MINGW/bin/$triple-ranlib)
-set(CMAKE_FIND_ROOT_PATH $DEPS_PREFIX $LLVM_MINGW/$triple)
-set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
-set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
-set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
-set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
-EOF
-      cat >"$toolchain_dir/windows.meson" <<EOF
-[binaries]
-c = '$triple-clang'
-cpp = '$triple-clang++'
-ar = '$triple-ar'
-strip = '$triple-strip'
-windres = '$triple-windres'
-pkg-config = 'pkg-config'
-
-[host_machine]
-system = 'windows'
-cpu_family = '$cpu_family'
-cpu = '$cpu'
-endian = 'little'
-EOF
-      CMAKE_TOOLCHAIN_ARGS=(-DCMAKE_TOOLCHAIN_FILE="$toolchain_dir/windows.cmake")
-      MESON_CROSS_ARGS=(--cross-file="$toolchain_dir/windows.meson")
+      write_cross_files Windows "$cpu_family" "$cpu" "$CC" "$CXX" "$AR" "$STRIP" "$WINDRES" "$LLVM_MINGW/$triple"
       FFMPEG_TOOLCHAIN_ARGS=(
         "--target-os=mingw32"
         "--arch=$ffmpeg_arch"
@@ -119,8 +157,9 @@ EOF
         "--extra-ldflags=-static"
       )
       ;;
+
     *)
-      fail "Unsupported platform for third-party libraries: $TARGET_PLATFORM"
+      fail "Unsupported target: $TARGET_PLATFORM/$TARGET_ARCH"
       ;;
   esac
 

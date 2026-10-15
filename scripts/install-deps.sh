@@ -39,12 +39,27 @@ case "$TARGET_PLATFORM" in
       install_python_build_tools
       command -v cmake >/dev/null || pipx install cmake
     else
-      sudo apt-get update
-      sudo apt-get install -y build-essential pkg-config nasm zip ccache patchelf
+      # Ubuntu 20.04 container (glibc 2.31) for the 32-bit targets, cross-compiled.
+      export DEBIAN_FRONTEND=noninteractive
       case "$TARGET_ARCH" in
-        x86)   sudo apt-get install -y gcc-i686-linux-gnu g++-i686-linux-gnu binutils-i686-linux-gnu ;;
-        armv7) sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf binutils-arm-linux-gnueabihf ;;
+        x86)
+          # The i386 C / C++ runtime lets the smoke test run the result natively.
+          dpkg --add-architecture i386
+          cross=(gcc-i686-linux-gnu g++-i686-linux-gnu libc6:i386 libstdc++6:i386 libgcc-s1:i386)
+          ;;
+        armv7)
+          # qemu-user runs the result for the smoke test.
+          cross=(gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf qemu-user)
+          ;;
+        *) fail "Unexpected Linux target outside the manylinux container: $TARGET_ARCH" ;;
       esac
+      apt-get update
+      apt-get install -y --no-install-recommends \
+        build-essential pkg-config nasm zip unzip xz-utils bzip2 automake autoconf libtool make \
+        git ca-certificates curl patchelf ccache python3-pip "${cross[@]}"
+      install_python_build_tools
+      # The distribution's CMake 3.16 is older than some libraries require.
+      python3 -m pip install --quiet --user --upgrade cmake
     fi
     ;;
 

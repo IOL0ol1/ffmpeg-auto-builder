@@ -95,7 +95,7 @@ trap report_changes EXIT
 for dep in "$repo_root"/deps/[0-9]*.sh; do
   DEP_NAME="$(basename "$dep" .sh)"
   DEP_NAME="${DEP_NAME#*-}"
-  DEP_PLATFORMS="linux/x86_64 linux/arm64 macos/x86_64 macos/arm64 windows/x86_64 windows/x86 windows/arm64"
+  DEP_PLATFORMS="linux/x86_64 linux/arm64 linux/x86 linux/armv7 macos/x86_64 macos/arm64 windows/x86_64 windows/x86 windows/arm64"
   unset -f dep_build
   source "$dep"
 
