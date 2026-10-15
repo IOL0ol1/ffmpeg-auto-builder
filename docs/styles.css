@@ -306,6 +306,8 @@ code {
 .choice-group {
   display: grid;
   gap: 8px;
+  /* Keep rows packed at the top so sibling groups line up regardless of hint length. */
+  align-content: start;
 }
 
 .group-title {
@@ -510,4 +512,18 @@ button.small {
   .segmented button {
     padding: 6px 9px;
   }
+}
+
+.badge {
+  padding: 0 6px;
+  border-radius: 6px;
+  background: #fff4d6;
+  color: var(--warn);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.chips .choice.unavailable {
+  opacity: 0.45;
+  cursor: not-allowed;
 }

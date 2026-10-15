@@ -39,8 +39,18 @@ export const SEGMENTS = [
     label: '许可证',
     default: 'gpl',
     options: [
-      { id: 'lgpl', label: 'LGPL', hint: 'LGPL v2.1+，可在闭源程序中动态链接。', flags: [] },
-      { id: 'gpl', label: 'GPL', hint: 'GPL v2+，启用仅限 GPL 的组件，衍生程序需开源。', flags: ['--enable-gpl'] },
+      {
+        id: 'lgpl',
+        label: 'LGPL',
+        hint: 'LGPL v2.1+，可闭源动态链接；仅限 GPL 的组件会被排除。',
+        flags: [],
+      },
+      {
+        id: 'gpl',
+        label: 'GPL',
+        hint: 'GPL v2+，可用仅限 GPL 的组件，衍生程序需开源。',
+        flags: ['--enable-gpl'],
+      },
       { id: 'gpl3', label: 'GPL v3', hint: 'GPL v3，额外启用要求 v3 的组件。', flags: ['--enable-gpl', '--enable-version3'] },
     ],
   },
@@ -77,6 +87,7 @@ export const TOGGLE_GROUPS = [
 ];
 
 // Component whitelists used in "slim" mode (--disable-everything + --enable-<kind>=...).
+// `gplOnly` lists components whose FFmpeg dependency is "gpl"; configure drops them under LGPL.
 export const COMPONENT_GROUPS = [
   {
     id: 'decoder',
@@ -124,8 +135,10 @@ export const COMPONENT_GROUPS = [
     id: 'filter',
     label: '滤镜',
     items: ['scale', 'format', 'null', 'copy', 'crop', 'pad', 'transpose', 'hflip', 'vflip', 'fps', 'setpts', 'trim', 'overlay',
+      'hqdn3d', 'delogo', 'eq', 'cropdetect', 'mpdecimate',
       'anull', 'acopy', 'aformat', 'aresample', 'volume', 'asetpts', 'atrim', 'amix', 'concat'],
     defaults: ['scale', 'format', 'null', 'copy', 'anull', 'acopy', 'aformat', 'aresample'],
+    gplOnly: ['hqdn3d', 'delogo', 'eq', 'cropdetect', 'mpdecimate'],
   },
 ];
 
@@ -186,6 +199,20 @@ export function toggleFlags(item, enabled) {
   return (enabled ? item.on : item.off) || [];
 }
 
+export function requiresGpl(group, name) {
+  return Boolean(group.gplOnly?.includes(name));
+}
+
+export function isComponentAvailable(config, group, name) {
+  return config.license !== 'lgpl' || !requiresGpl(group, name);
+}
+
+// Selected components that the current license allows; the stored selection is kept
+// so switching back to GPL restores it.
+export function effectiveComponents(config, group) {
+  return (config.components[group.id] || []).filter((name) => isComponentAvailable(config, group, name));
+}
+
 // Order: segments → toggles → components → custom; later tokens override earlier ones.
 export function buildConfigure(config) {
   const custom = splitTokens(config.custom);
@@ -194,8 +221,9 @@ export function buildConfigure(config) {
     ...TOGGLE_GROUPS.flatMap((group) => group.items).flatMap((item) => toggleFlags(item, config.toggles[item.id])),
     ...(config.componentMode === 'slim'
       ? ['--disable-everything', ...COMPONENT_GROUPS
-        .filter((group) => config.components[group.id]?.length)
-        .map((group) => `--enable-${group.id}=${config.components[group.id].join(',')}`)]
+        .map((group) => [group, effectiveComponents(config, group)])
+        .filter(([, names]) => names.length)
+        .map(([group, names]) => `--enable-${group.id}=${names.join(',')}`)]
       : []),
     ...custom,
   ]);
@@ -228,7 +256,10 @@ function collectWarnings(config, tokens, custom) {
   if (has('--disable-ffmpeg') && has('--disable-ffprobe')) info('未选择任何程序，将只生成库和头文件。');
 
   if (config.componentMode === 'slim') {
-    const selected = (id) => config.components[id] || [];
+    const selected = (id) => effectiveComponents(config, COMPONENT_GROUPS.find((group) => group.id === id));
+    const dropped = COMPONENT_GROUPS.flatMap((group) => (config.components[group.id] || [])
+      .filter((name) => !isComponentAvailable(config, group, name)));
+    if (dropped.length) info(`LGPL 许可证下已排除仅限 GPL 的组件：${dropped.join('、')}。`);
     if (!selected('protocol').length) warn('精简模式下未选择任何协议，将无法读写文件（至少保留 file）。');
     if (!selected('decoder').length && !selected('encoder').length) {
       warn('精简模式下未选择任何编解码器，只能做封装格式转换。');

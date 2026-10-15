@@ -1,6 +1,7 @@
 import {
   COMPONENT_GROUPS, SEGMENTS, TOGGLE_GROUPS,
-  buildConfigure, defaultConfig, importConfigure, normalizeConfig,
+  buildConfigure, defaultConfig, effectiveComponents, importConfigure, isComponentAvailable, normalizeConfig,
+  requiresGpl,
 } from './configure.js';
 
 const form = document.querySelector('#build-form');
@@ -280,6 +281,12 @@ function renderConfigControls() {
         setSelection(next);
       });
       chip.dataset.component = item;
+      if (requiresGpl(group, item)) {
+        const badge = document.createElement('span');
+        badge.className = 'badge';
+        badge.textContent = 'GPL';
+        chip.appendChild(badge);
+      }
       chips.appendChild(chip);
     });
 
@@ -309,10 +316,16 @@ function syncConfigUI() {
   componentGroupsNode.hidden = !slim;
   COMPONENT_GROUPS.forEach((group) => {
     const node = componentGroupsNode.querySelector(`[data-group="${group.id}"]`);
-    const selected = config.components[group.id] || [];
+    const selected = effectiveComponents(config, group);
     node.querySelector('.count').textContent = `${selected.length} / ${group.items.length}`;
     node.querySelectorAll('[data-component]').forEach((chip) => {
-      chip.querySelector('input').checked = selected.includes(chip.dataset.component);
+      const name = chip.dataset.component;
+      const available = isComponentAvailable(config, group, name);
+      const input = chip.querySelector('input');
+      input.checked = selected.includes(name);
+      input.disabled = !available;
+      chip.classList.toggle('unavailable', !available);
+      chip.title = available ? `--enable-${group.id}=${name}` : '仅限 GPL：需要把许可证切换为 GPL 或 GPL v3';
     });
   });
 
