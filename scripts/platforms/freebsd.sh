@@ -44,8 +44,9 @@ platform_toolchain() {
 
   local dir="$DEPS_PREFIX/../toolchain" tool
   mkdir -p "$dir"
+  # -fuse-ld also reaches compile-only steps; -Werror checks must not trip on that.
   for tool in clang clang++; do
-    printf '#!/bin/sh\nexec %s --target=%s --sysroot="%s" -fuse-ld=lld "$@"\n' \
+    printf '#!/bin/sh\nexec %s --target=%s --sysroot="%s" -fuse-ld=lld -Wno-unused-command-line-argument "$@"\n' \
       "$tool" "$triple" "$FREEBSD_SYSROOT" >"$dir/$tool"
     chmod +x "$dir/$tool"
   done

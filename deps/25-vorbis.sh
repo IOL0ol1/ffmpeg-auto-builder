@@ -6,7 +6,7 @@ DEP_SHA256=b33cc4934322bcbf6efcbacf49e3ca01aadbea4114ec9589d1b1e9d20f72954b
 dep_build() {
   fetch_source
   update_config_scripts
-  # The macOS flag below is rejected by current Apple linkers.
-  sed -i.bak 's/-force_cpusubtype_ALL//g' configure
+  # Current Apple linkers reject -force_cpusubtype_ALL; clang rejects the GCC-only -mno-ieee-fp.
+  sed -i.bak -e 's/-force_cpusubtype_ALL//g' -e 's/-mno-ieee-fp//g' configure
   autotools_build --disable-docs --disable-examples --disable-oggtest
 }

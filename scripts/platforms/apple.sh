@@ -51,8 +51,10 @@ platform_toolchain() {
   mkdir -p "$dir"
   if [[ "$TARGET_PLATFORM" == maccatalyst ]]; then
     extra="-iframework $sdk_path/System/iOSSupport/System/Library/Frameworks"
-    extra+=" -isystem $sdk_path/System/iOSSupport/usr/include -L$sdk_path/System/iOSSupport/usr/lib"
+    extra+=" -isystem $sdk_path/System/iOSSupport/usr/include"
   fi
+  # The same flags reach compile-only and link-only steps; -Werror checks must not trip on that.
+  extra+=" -Wno-unused-command-line-argument"
   local tool
   for tool in clang clang++; do
     printf '#!/bin/sh\nexec "%s" -target %s -isysroot "%s" %s "$@"\n' \
