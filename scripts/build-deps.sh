@@ -125,7 +125,16 @@ for dep in "$repo_root"/deps/[0-9]*.sh; do
   fi
 
   echo "::group::Build $DEP_NAME $DEP_VERSION"
+  touch "$DEPS_WORK/.build-start"
   (dep_build)
+  # A library kept static in shared mode may have been shared in a cached prefix; remove
+  # those files, so the linker takes the new static library.
+  if [[ "$DEPS_LINKAGE" == shared ]] && ! dep_shared; then
+    while IFS= read -r archive; do
+      base="${archive%.a}"
+      rm -f "$base".so* "$base".*dylib "$base.dylib" "$base.dll.a"
+    done < <(find "$DEPS_PREFIX/lib" -maxdepth 1 -name 'lib*.a' ! -name '*.dll.a' -newer "$DEPS_WORK/.build-start")
+  fi
   echo "::endgroup::"
   mkdir -p "$DEPS_PREFIX/.stamps"
   touch "$stamp"
