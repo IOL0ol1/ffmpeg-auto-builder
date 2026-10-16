@@ -91,28 +91,21 @@ make_framework() {
   local base
   base="$(basename "$dylib")"
   base="${base%%.*}"
-  local fw="$tree/frameworks/$base.framework" plist headers supported min_key min_version
+  local fw="$tree/frameworks/$base.framework" plist supported min_key min_version
   read -r supported min_key min_version <<<"$(platform_keys "$group")"
   rm -rf "$fw"
+  # macOS bundles keep their contents in Versions/A (symlinked at the top, below).
+  local contents="$fw" resources="$fw"
   if [[ "$group" == macos || "$group" == maccatalyst ]]; then
-    # macOS layout: Versions/A with symlinks at the top.
-    mkdir -p "$fw/Versions/A/Resources"
-    cp "$dylib" "$fw/Versions/A/$base"
-    ln -s A "$fw/Versions/Current"
-    ln -s "Versions/Current/$base" "$fw/$base"
-    ln -s Versions/Current/Resources "$fw/Resources"
-    plist="$fw/Versions/A/Resources/Info.plist"
-    headers="$fw/Versions/A/Headers"
-  else
-    mkdir -p "$fw"
-    cp "$dylib" "$fw/$base"
-    plist="$fw/Info.plist"
-    headers="$fw/Headers"
+    contents="$fw/Versions/A"
+    resources="$contents/Resources"
   fi
+  mkdir -p "$resources"
+  cp "$dylib" "$contents/$base"
+  plist="$resources/Info.plist"
   if is_ffmpeg_lib "$base" && [[ -d "$tree/include/$base" ]]; then
-    mkdir -p "$headers"
-    cp -R "$tree/include/$base/." "$headers/"
-    [[ "$group" != macos && "$group" != maccatalyst ]] || ln -s Versions/Current/Headers "$fw/Headers"
+    mkdir -p "$contents/Headers"
+    cp -R "$tree/include/$base/." "$contents/Headers/"
   fi
   cat >"$plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -132,6 +125,13 @@ make_framework() {
 </dict>
 </plist>
 EOF
+  if [[ "$contents" != "$fw" ]]; then
+    ln -s A "$fw/Versions/Current"
+    local entry
+    for entry in "$base" Resources Headers; do
+      [[ ! -e "$contents/$entry" ]] || ln -s "Versions/Current/$entry" "$fw/$entry"
+    done
+  fi
 }
 
 version="$(sed -n 's/^ffmpeg_version: *\([0-9][0-9.]*\).*/\1/p' "$work/groups/${groups[0]}/BUILDINFO.txt" 2>/dev/null | head -n 1)"
@@ -167,29 +167,45 @@ done
 
 first="$work/groups/${groups[0]}"
 names=()
-for file in "$first"/lib/lib*.a "$first"/frameworks/*.framework; do
-  base="$(basename "$file")"
-  names+=("${base%%.*}")
+for group in "${groups[@]}"; do
+  for file in "$work/groups/$group"/lib/lib*.a "$work/groups/$group"/frameworks/*.framework; do
+    base="$(basename "$file")"
+    names+=("${base%%.*}")
+  done
 done
 [[ "${#names[@]}" -gt 0 ]] || fail "the archives contain no libraries"
 
+# xcodebuild -create-xcframework <slices> <output>
+create_xcframework() {
+  local output="${!#}"
+  xcodebuild -create-xcframework "${@:1:$#-1}" -output "$output" >/dev/null
+}
+
 for base in $(printf '%s\n' "${names[@]}" | sort -u); do
-  args=()
+  frameworks=()
+  libraries=()
   for group in "${groups[@]}"; do
     tree="$work/groups/$group"
     if [[ -d "$tree/frameworks/$base.framework" ]]; then
-      args+=(-framework "$tree/frameworks/$base.framework")
+      frameworks+=(-framework "$tree/frameworks/$base.framework")
     elif [[ -f "$tree/lib/$base.a" ]]; then
-      args+=(-library "$tree/lib/$base.a")
+      libraries+=(-library "$tree/lib/$base.a")
       if is_ffmpeg_lib "$base" && [[ -d "$tree/include/$base" ]]; then
         # Headers keep their directory, so #include <libavcodec/avcodec.h> works.
         mkdir -p "$tree/headers/$base"
         cp -R "$tree/include/$base" "$tree/headers/$base/"
-        args+=(-headers "$tree/headers/$base")
+        libraries+=(-headers "$tree/headers/$base")
       fi
     fi
   done
-  xcodebuild -create-xcframework "${args[@]}" -output "$work/out/$base.xcframework" >/dev/null
+  # An XCFramework holds one kind; a library that is a framework on some targets and static
+  # on others (shared third-party libraries kept static there) gets a second, -static one.
+  if [[ "${#frameworks[@]}" -gt 0 ]]; then
+    create_xcframework "${frameworks[@]}" "$work/out/$base.xcframework"
+    [[ "${#libraries[@]}" -eq 0 ]] || create_xcframework "${libraries[@]}" "$work/out/$base-static.xcframework"
+  else
+    create_xcframework "${libraries[@]}" "$work/out/$base.xcframework"
+  fi
 done
 cp "$first/BUILDINFO.txt" "$work/out/BUILDINFO.txt" 2>/dev/null || true
 

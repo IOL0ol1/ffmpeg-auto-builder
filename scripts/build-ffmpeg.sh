@@ -100,8 +100,7 @@ shopt -s nullglob
 # Static FFmpeg libraries still need the third-party ones they were built against; ship
 # them next to libavcodec.a etc. so that linking with the package works on its own.
 bundle_static_deps() {
-  local libs=("$install_root"/lib/libavutil.a)
-  [[ "${#libs[@]}" -gt 0 && -n "${DEPS_PREFIX:-}" ]] || return 0
+  [[ -f "$install_root/lib/libavutil.a" && -n "${DEPS_PREFIX:-}" ]] || return 0
   local lib
   for lib in "$DEPS_PREFIX"/lib/*.a; do
     [[ -e "$install_root/lib/$(basename "$lib")" ]] || cp "$lib" "$install_root/lib/"
