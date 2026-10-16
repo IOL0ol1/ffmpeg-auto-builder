@@ -92,7 +92,7 @@
       "label": "visionOS",
       "nuget": "visionos",
       "toolchain": "apple",
-      "tls": true,
+      "tls": false,
       "linkage": ["static"],
       "programs": false,
       "archs": {

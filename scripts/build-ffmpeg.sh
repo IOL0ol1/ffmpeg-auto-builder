@@ -41,10 +41,11 @@ if [[ -n "${DEPS_PREFIX:-}" ]]; then
   case "$TARGET_PLATFORM/$TARGET_ARCH" in
     # The 32-bit x86 assembly needs text relocations, which Android rejects.
     android/x86) injected_args+=("--disable-asm") ;;
-    # Mac Catalyst has neither NSOpenGL (Core Image filters) nor Secure Transport.
-    maccatalyst/*) injected_args+=("--disable-coreimage" "--disable-securetransport") ;;
-    # visionOS has no AVFoundation capture devices.
-    visionos/*) injected_args+=("--disable-indev=avfoundation") ;;
+    # Mac Catalyst and visionOS lack Secure Transport and the OpenGL ES pixel buffer key
+    # VideoToolbox support uses; Mac Catalyst has no NSOpenGL (Core Image filters), visionOS
+    # no AVFoundation capture devices.
+    maccatalyst/*) injected_args+=("--disable-coreimage" "--disable-securetransport" "--disable-videotoolbox") ;;
+    visionos/*) injected_args+=("--disable-indev=avfoundation" "--disable-securetransport" "--disable-videotoolbox") ;;
     # The MIPS FPU inline assembly uses odd float registers, which the o32 ABI forbids.
     linux/mipsel) injected_args+=("--disable-mipsfpu") ;;
   esac

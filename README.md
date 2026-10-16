@@ -239,7 +239,7 @@ The page turns common configure switches into visual controls and builds the fla
   - **Linked dependencies**: disabling libavfilter also disables ffmpeg (which depends on it), and enabling ffmpeg enables libavfilter; the page shows a notice and highlights the linked option.
   - **License**: GPL-only components (such as the `hqdn3d`, `delogo`, `eq`, `cropdetect` and `mpdecimate` filters) carry a **GPL** badge and are greyed out under LGPL.
   - **Library dependencies**: with libswscale / libswresample disabled, the `scale` / `aresample` filters are greyed out in slim mode.
-  - **Target platform**: the `https` protocol is only available where the system provides TLS (macOS, Windows, iOS, tvOS, visionOS). iOS / tvOS / visionOS / WebAssembly only offer static linking and no ffmpeg / ffprobe programs, and cannot be selected for NuGet.
+  - **Target platform**: the `https` protocol is only available where the system provides TLS (macOS, Windows, iOS, tvOS). iOS / tvOS / visionOS / WebAssembly only offer static linking and no ffmpeg / ffprobe programs, and cannot be selected for NuGet.
   - **Third-party libraries**: x264 / x265 (GPL) are unavailable under LGPL, SVT-AV1 is only available on 64-bit x86 / Arm targets, and WebAssembly (single-threaded) has no x265, SVT-AV1, dav1d or libass; with several NuGet architectures a library must be available on all of them.
   - **Slim mode**: the `file` protocol is always kept so local files can be read and written.
   - Hover over a greyed-out option to see why; when the restriction is lifted (e.g. switching back to GPL), the earlier selection comes back.
@@ -279,7 +279,7 @@ The page turns common configure switches into visual controls and builds the fla
 - **Smoke test**: Windows, Android, the Apple mobile targets, FreeBSD and WebAssembly are cross-compiled and cannot run on the build host, so `ffmpeg -version` is not run for them.
 - **Apple mobile / WebAssembly** packages contain static libraries only (FFmpeg's plus the third-party ones in `lib/`); link them into your app. There is no `.xcframework` packaging yet.
 - **x265** is built 8-bit only (no 10/12-bit multilib yet).
-- **TLS**: Linux, Android, Mac Catalyst, FreeBSD and WebAssembly builds have no TLS library, so `https` is not available there; Windows uses Schannel and the Apple platforms the system TLS.
+- **TLS**: Linux, Android, visionOS, Mac Catalyst, FreeBSD and WebAssembly builds have no TLS library, so `https` is not available there; Windows uses Schannel and the Apple platforms the system TLS.
 - **libass on Linux** is built without fontconfig: subtitle fonts come from the subtitle file's attachments or the filter's `fontsdir`.
 - The first build of the third-party libraries for a target takes 20–40 minutes until it is cached.
 - **macOS Intel**: GitHub plans to stop providing Intel runners when the macOS 15 image is retired in fall 2027; macOS x86_64 / universal will then need cross-compiling on arm64.
