@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Toolchain setup shared by scripts/build-deps.sh and scripts/build-ffmpeg.sh. The
-# per-platform part is platform_toolchain in scripts/platforms/<platform>.sh.
+# per-platform part is platform_toolchain in scripts/platforms/<toolchain>.sh
+# (TARGET_TOOLCHAIN, default: the platform).
 #
 # setup_toolchain exports CC/CXX/... and sets, for the build helpers and FFmpeg:
 #   AUTOTOOLS_HOST_ARGS, CMAKE_TOOLCHAIN_ARGS, MESON_CROSS_ARGS  (arrays)
@@ -72,7 +73,7 @@ setup_toolchain() {
   export LDFLAGS="-L$DEPS_PREFIX/lib"
 
   local platform_file
-  platform_file="$(dirname "${BASH_SOURCE[0]}")/platforms/$TARGET_PLATFORM.sh"
+  platform_file="$(dirname "${BASH_SOURCE[0]}")/platforms/${TARGET_TOOLCHAIN:-$TARGET_PLATFORM}.sh"
   [[ -f "$platform_file" ]] || fail "Unsupported target: $TARGET_PLATFORM/$TARGET_ARCH"
   source "$platform_file"
   platform_toolchain

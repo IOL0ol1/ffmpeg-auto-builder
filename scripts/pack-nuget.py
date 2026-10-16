@@ -53,7 +53,10 @@ def is_runtime_file(path):
     name = path.name
     if path.parent.name == "bin":
         return not name.endswith((".lib", ".def", ".a"))
-    # Shared libraries under their runtime (SONAME / install) names.
+    # Shared libraries under their runtime (SONAME / install) names; Android libraries
+    # have no version suffix (libavcodec.so).
+    if re.fullmatch(r"lib[^.]+\.so", name):
+        return not any(path.parent.glob(name + ".*"))
     return bool(re.fullmatch(r"lib[^.]+\.so\.\d+", name) or re.fullmatch(r"lib[^.]+\.\d+\.dylib", name))
 
 

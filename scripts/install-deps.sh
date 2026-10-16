@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Install the build tools for one target; the per-platform part is platform_install in
-# scripts/platforms/<platform>.sh.
+# scripts/platforms/<toolchain>.sh (TARGET_TOOLCHAIN, default: the platform).
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -27,7 +27,7 @@ install_python_build_tools() {
   export PATH="$HOME/.local/bin:$PATH"
 }
 
-platform_file="$script_dir/platforms/$TARGET_PLATFORM.sh"
+platform_file="$script_dir/platforms/${TARGET_TOOLCHAIN:-$TARGET_PLATFORM}.sh"
 [[ -f "$platform_file" ]] || fail "Unsupported target platform: $TARGET_PLATFORM"
 source "$platform_file"
 platform_install

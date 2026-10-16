@@ -43,6 +43,7 @@ jobs:
     env:
       TARGET_PLATFORM: ${{ matrix.platform }}
       TARGET_ARCH: ${{ matrix.arch }}
+      TARGET_TOOLCHAIN: ${{ matrix.toolchain }}
       MACOSX_DEPLOYMENT_TARGET: '11.0'
     steps:
       - name: Check out repository
@@ -57,7 +58,7 @@ jobs:
         shell: bash
         run: |
           echo "DEPS_PREFIX=$GITHUB_WORKSPACE/.deps/prefix" >> "$GITHUB_ENV"
-          echo "toolchain=${{ hashFiles('scripts/build-deps.sh', 'scripts/toolchain.sh', 'scripts/install-deps.sh', format('scripts/platforms/{0}.sh', matrix.platform)) }}" >> "$GITHUB_OUTPUT"
+          echo "toolchain=${{ hashFiles('scripts/build-deps.sh', 'scripts/toolchain.sh', 'scripts/install-deps.sh', format('scripts/platforms/{0}.sh', matrix.toolchain)) }}" >> "$GITHUB_OUTPUT"
 
       - name: Restore dependencies
         uses: actions/cache/restore@v4

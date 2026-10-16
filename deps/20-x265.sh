@@ -18,8 +18,11 @@ dep_build() {
   case "$TARGET_PLATFORM/$TARGET_ARCH" in
     */x86_64 | linux/arm64 | macos/arm64) asm=ON ;;
   esac
+  # The POWER AltiVec primitives do not build with current compilers.
+  local altivec=()
+  [[ "$TARGET_ARCH" != ppc64le ]] || altivec=(-DENABLE_ALTIVEC=OFF)
   cmake_build -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
-    -DENABLE_SHARED=OFF -DENABLE_CLI=OFF -DENABLE_ASSEMBLY="$asm"
+    -DENABLE_SHARED=OFF -DENABLE_CLI=OFF -DENABLE_ASSEMBLY="$asm" ${altivec[@]+"${altivec[@]}"}
   # x265 prefixes every implicit compiler library with -l; llvm-mingw reports
   # "-l:libunwind.a", which turns into the invalid "-l-l:libunwind.a".
   sed -i.bak 's/-l-l:/-l:/g' "$DEPS_PREFIX/lib/pkgconfig/x265.pc"

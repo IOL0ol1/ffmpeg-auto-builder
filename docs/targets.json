@@ -2,7 +2,8 @@
   "$comment": [
     "Build targets: the single source of truth for the page (docs/configure.js), the workflow",
     "(scripts/targets.py) and the NuGet packer. Platform and architecture ids contain no '-'.",
-    "platform: label, nuget (NuGet id suffix for several RIDs), tls (https protocol available),",
+    "platform: label, nuget (NuGet id suffix for several RIDs), toolchain (scripts/platforms/",
+    "  <toolchain>.sh, default: the platform id), tls (https protocol available),",
     "  linkage (allowed linkage options, default all; NuGet needs 'shared'), programs (false:",
     "  ffmpeg / ffprobe cannot be built).",
     "arch: label, rid (NuGet runtime identifier), runner, container, unavailable (library",
@@ -18,7 +19,14 @@
         "x86_64": { "label": "x86_64", "rid": "linux-x64", "runner": "ubuntu-latest", "container": "quay.io/pypa/manylinux_2_28_x86_64" },
         "x86": { "label": "x86 (32-bit)", "rid": "linux-x86", "runner": "ubuntu-latest", "container": "ubuntu:20.04", "unavailable": ["svtav1"] },
         "arm64": { "label": "arm64 (AArch64)", "rid": "linux-arm64", "runner": "ubuntu-24.04-arm", "container": "quay.io/pypa/manylinux_2_28_aarch64" },
-        "armv7": { "label": "armv7 (ARM 32-bit)", "rid": "linux-arm", "runner": "ubuntu-latest", "container": "ubuntu:20.04", "unavailable": ["svtav1"] }
+        "armv7": { "label": "armv7 (ARM 32-bit)", "rid": "linux-arm", "runner": "ubuntu-latest", "container": "ubuntu:20.04", "unavailable": ["svtav1"] },
+        "armel": { "label": "armel (ARMv5TE, soft-float)", "rid": "linux-armel", "runner": "ubuntu-latest", "container": "ubuntu:20.04", "unavailable": ["svtav1"] },
+        "ppc64le": { "label": "ppc64le (POWER8+)", "rid": "linux-ppc64le", "runner": "ubuntu-latest", "container": "ubuntu:20.04", "unavailable": ["svtav1"] },
+        "s390x": { "label": "s390x (IBM Z)", "rid": "linux-s390x", "runner": "ubuntu-latest", "container": "ubuntu:20.04", "unavailable": ["svtav1"] },
+        "riscv64": { "label": "riscv64 (RV64GC)", "rid": "linux-riscv64", "runner": "ubuntu-latest", "container": "ubuntu:20.04", "unavailable": ["svtav1"] },
+        "mips64el": { "label": "mips64el (MIPS64r2)", "rid": "linux-mips64el", "runner": "ubuntu-latest", "container": "ubuntu:20.04", "unavailable": ["svtav1"] },
+        "mipsel": { "label": "mipsel (MIPS32r2)", "rid": "linux-mipsel", "runner": "ubuntu-latest", "container": "ubuntu:20.04", "unavailable": ["svtav1"] },
+        "loongarch64": { "label": "loongarch64 (LA64)", "rid": "linux-loongarch64", "runner": "ubuntu-latest", "container": "ubuntu:24.04", "unavailable": ["svtav1"] }
       }
     },
     "macos": {
@@ -39,6 +47,17 @@
         "x86_64": { "label": "x86_64", "rid": "win-x64", "runner": "ubuntu-latest" },
         "x86": { "label": "x86 (32-bit)", "rid": "win-x86", "runner": "ubuntu-latest", "unavailable": ["svtav1"] },
         "arm64": { "label": "arm64 (AArch64)", "rid": "win-arm64", "runner": "ubuntu-latest" }
+      }
+    },
+    "android": {
+      "label": "Android",
+      "nuget": "android",
+      "tls": false,
+      "archs": {
+        "arm64": { "label": "arm64-v8a", "rid": "android-arm64", "runner": "ubuntu-latest" },
+        "armv7": { "label": "armeabi-v7a", "rid": "android-arm", "runner": "ubuntu-latest", "unavailable": ["svtav1"] },
+        "x86_64": { "label": "x86_64", "rid": "android-x64", "runner": "ubuntu-latest" },
+        "x86": { "label": "x86", "rid": "android-x86", "runner": "ubuntu-latest", "unavailable": ["svtav1"] }
       }
     }
   }

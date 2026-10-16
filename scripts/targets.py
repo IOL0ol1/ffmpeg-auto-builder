@@ -33,6 +33,8 @@ def entry(platform, arch, slice_=False):
         "arch": arch,
         "os": spec["runner"],
         "container": spec.get("container", ""),
+        # scripts/platforms/<toolchain>.sh; several platforms can share one.
+        "toolchain": PLATFORMS[platform].get("toolchain", platform),
         "slice": "true" if slice_ else "",
     }
 

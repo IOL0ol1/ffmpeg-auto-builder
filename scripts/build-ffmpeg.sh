@@ -30,8 +30,10 @@ if [[ -n "${DEPS_PREFIX:-}" ]]; then
   # Static C++ libraries (x265, zimg, HarfBuzz, ...) need the C++ runtime at link time, and
   # glibc 2.28 keeps libm and libpthread separate, and soxr / x265 do not list them.
   case "$TARGET_PLATFORM" in
-    linux) injected_args+=("--extra-libs=-lstdc++" "--extra-libs=-lm" "--extra-libs=-lpthread") ;;
-    *)     injected_args+=("--extra-libs=-lc++") ;;
+    linux)   injected_args+=("--extra-libs=-lstdc++" "--extra-libs=-lm" "--extra-libs=-lpthread") ;;
+    # The NDK's static libc++; bionic has no separate libpthread.
+    android) injected_args+=("--extra-libs=-lc++_static" "--extra-libs=-lc++abi" "--extra-libs=-lm") ;;
+    *)       injected_args+=("--extra-libs=-lc++") ;;
   esac
   # On Intel Macs Homebrew lives in /usr/local, which the compiler searches by default, so
   # link-test autodetection would pick up its liblzma / libX11 and tie the binaries to it.

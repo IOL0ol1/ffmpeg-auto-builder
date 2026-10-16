@@ -14,6 +14,9 @@ dep_build() {
     windows/arm64)           cpu=(-DAOM_TARGET_CPU=arm64) ;;
     # libaom's armv7 NEON code assumes NEON, which the armhf baseline does not guarantee.
     linux/armv7)             cpu=(-DAOM_TARGET_CPU=arm -DENABLE_NEON=0) ;;
+    # Portable C elsewhere (armel has no NEON; the others need newer compiler extensions).
+    linux/x86_64 | linux/arm64) ;;
+    linux/*)                 cpu=(-DAOM_TARGET_CPU=generic) ;;
   esac
   cmake_build -DENABLE_DOCS=0 -DENABLE_EXAMPLES=0 -DENABLE_TESTS=0 -DENABLE_TOOLS=0 \
     ${cpu[@]+"${cpu[@]}"}
