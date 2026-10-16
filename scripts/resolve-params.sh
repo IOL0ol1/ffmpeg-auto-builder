@@ -7,36 +7,37 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$script_dir/common.sh"
 
 # Errors are posted on the issue, so they follow the language of its form (ISSUE_LANG).
+# msg <key> [value] [allowed values]
 msg() {
-  local key="$1" arg="${2:-}"
+  local key="$1" arg="${2:-}" allowed="${3:-}"
   case "${ISSUE_LANG:-en}/$key" in
-    ja/platform)    printf 'ターゲットプラットフォームが不正です：%s（linux / macos / windows のいずれか）' "$arg" ;;
-    ja/arch)        printf 'ターゲットアーキテクチャが不正です：%s（x86_64 / x86 / arm64 / armv7 / universal / all のいずれか）' "$arg" ;;
-    ja/archAll)     printf 'アーキテクチャ all は NuGet パッケージ形式でのみ使用できます' ;;
-    ja/format)      printf 'パッケージ形式が不正です：%s（tar.gz / zip / nuget のいずれか）' "$arg" ;;
-    ja/repo)        printf 'GitHub リポジトリのみ対応しています：%s' "$arg" ;;
-    ja/ref)         printf 'ブランチ / タグ / コミットが不正です：%s' "$arg" ;;
-    ja/token)       printf 'configure フラグに使用できない文字が含まれています：%s' "$arg" ;;
-    ja/prefix)      printf -- '--prefix は指定できません（インストール先はビルド処理が管理します）' ;;
-    ja/target)      printf 'ビルドできるターゲットがありません：%s' "$arg" ;;
-    zh-CN/platform) printf '目标平台无效：%s（可选 linux / macos / windows）' "$arg" ;;
-    zh-CN/arch)     printf '目标指令集无效：%s（可选 x86_64 / x86 / arm64 / armv7 / universal / all）' "$arg" ;;
-    zh-CN/archAll)  printf '指令集 all 仅适用于 NuGet 打包格式' ;;
-    zh-CN/format)   printf '打包格式无效：%s（可选 tar.gz / zip / nuget）' "$arg" ;;
-    zh-CN/repo)     printf '源码仓库只支持 GitHub 地址：%s' "$arg" ;;
-    zh-CN/ref)      printf '源码分支 / tag / commit 无效：%s' "$arg" ;;
-    zh-CN/token)    printf 'configure 参数含有不允许的字符：%s' "$arg" ;;
-    zh-CN/prefix)   printf -- '不能指定 --prefix：安装路径由编译流程管理' ;;
-    zh-CN/target)   printf '没有可构建的目标：%s' "$arg" ;;
-    */platform)     printf 'Invalid target platform: %s (one of linux / macos / windows)' "$arg" ;;
-    */arch)         printf 'Invalid target architecture: %s (one of x86_64 / x86 / arm64 / armv7 / universal / all)' "$arg" ;;
-    */archAll)      printf 'The "all" architecture is only available for the NuGet package format' ;;
-    */format)       printf 'Invalid package format: %s (one of tar.gz / zip / nuget)' "$arg" ;;
-    */repo)         printf 'Only GitHub repositories are supported: %s' "$arg" ;;
-    */ref)          printf 'Invalid branch / tag / commit: %s' "$arg" ;;
-    */token)        printf 'configure flags contain characters that are not allowed: %s' "$arg" ;;
-    */prefix)       printf -- '--prefix cannot be set: the install path is managed by the build' ;;
-    */target)       printf 'No buildable target for %s' "$arg" ;;
+    ja/platform)       printf 'ターゲットプラットフォームが不正です：%s（%s のいずれか）' "$arg" "$allowed" ;;
+    ja/arch)           printf 'ターゲットアーキテクチャが不正です：%s（%s のいずれか）' "$arg" "$allowed" ;;
+    ja/archMulti)      printf '複数のアーキテクチャを指定できるのは NuGet パッケージ形式のみです：%s' "$arg" ;;
+    ja/nugetPlatform)  printf '%s は静的ライブラリのみ対応のため NuGet パッケージにできません（NuGet は共有ライブラリが必要です）' "$arg" ;;
+    ja/format)         printf 'パッケージ形式が不正です：%s（tar.gz / zip / nuget のいずれか）' "$arg" ;;
+    ja/repo)           printf 'GitHub リポジトリのみ対応しています：%s' "$arg" ;;
+    ja/ref)            printf 'ブランチ / タグ / コミットが不正です：%s' "$arg" ;;
+    ja/token)          printf 'configure フラグに使用できない文字が含まれています：%s' "$arg" ;;
+    ja/prefix)         printf -- '--prefix は指定できません（インストール先はビルド処理が管理します）' ;;
+    zh-CN/platform)    printf '目标平台无效：%s（可选 %s）' "$arg" "$allowed" ;;
+    zh-CN/arch)        printf '目标指令集无效：%s（可选 %s）' "$arg" "$allowed" ;;
+    zh-CN/archMulti)   printf '只有 NuGet 打包格式可以选择多个指令集：%s' "$arg" ;;
+    zh-CN/nugetPlatform) printf '%s 只支持静态库，不能打包为 NuGet（NuGet 包需要共享库）' "$arg" ;;
+    zh-CN/format)      printf '打包格式无效：%s（可选 tar.gz / zip / nuget）' "$arg" ;;
+    zh-CN/repo)        printf '源码仓库只支持 GitHub 地址：%s' "$arg" ;;
+    zh-CN/ref)         printf '源码分支 / tag / commit 无效：%s' "$arg" ;;
+    zh-CN/token)       printf 'configure 参数含有不允许的字符：%s' "$arg" ;;
+    zh-CN/prefix)      printf -- '不能指定 --prefix：安装路径由编译流程管理' ;;
+    */platform)        printf 'Invalid target platform: %s (one of %s)' "$arg" "$allowed" ;;
+    */arch)            printf 'Invalid target architecture: %s (one of %s)' "$arg" "$allowed" ;;
+    */archMulti)       printf 'Several architectures can only be selected for the NuGet package format: %s' "$arg" ;;
+    */nugetPlatform)   printf '%s only supports static libraries, so it cannot be packaged as NuGet (NuGet needs shared libraries)' "$arg" ;;
+    */format)          printf 'Invalid package format: %s (one of tar.gz / zip / nuget)' "$arg" ;;
+    */repo)            printf 'Only GitHub repositories are supported: %s' "$arg" ;;
+    */ref)             printf 'Invalid branch / tag / commit: %s' "$arg" ;;
+    */token)           printf 'configure flags contain characters that are not allowed: %s' "$arg" ;;
+    */prefix)          printf -- '--prefix cannot be set: the install path is managed by the build' ;;
   esac
 }
 
@@ -62,20 +63,21 @@ fi
 
 # ── Validate ─────────────────────────────────────────────────────────────────
 
-case "$target_platform" in
-  linux | macos | windows) ;;
-  *) fail "$(msg platform "$target_platform")" ;;
-esac
-case "$target_arch" in
-  x86_64 | x86 | arm64 | armv7 | universal | all) ;;
-  *) fail "$(msg arch "$target_arch")" ;;
-esac
 case "$package_format" in
   tar.gz | zip | nuget) ;;
   *) fail "$(msg format "$package_format")" ;;
 esac
-# "all" puts every architecture of the platform into one NuGet package.
-[[ "$target_arch" != "all" || "$package_format" == "nuget" ]] || fail "$(msg archAll)"
+
+# Platform and architectures come from docs/targets.json; NuGet takes a comma-separated list
+# of architectures, the other formats exactly one.
+target_arch="$(printf '%s' "$target_arch" | tr -d ' ')"
+if ! resolved="$(python3 -I "$script_dir/targets.py" resolve "$target_platform" "$target_arch" "$package_format")"; then
+  IFS=$'\t' read -r _ code value allowed <<<"$resolved"
+  fail "$(msg "$code" "$value" "$allowed")"
+fi
+while IFS='=' read -r key value; do
+  printf -v "resolved_$key" '%s' "${value%$'\r'}"
+done <<<"$resolved"
 
 source_slug="$(parse_repository_slug "$source_repository" 2>/dev/null)" || fail "$(msg repo "$source_repository")"
 if [[ -n "$source_ref" && ! "$source_ref" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]]; then
@@ -99,74 +101,23 @@ if [[ "$package_format" == "nuget" ]]; then
   archive_format="zip"
 fi
 
-release_tag="ffmpeg-${target_platform}-${target_arch}-$(date -u +%Y%m%dt%H%M%S)-${tag_suffix}"
+# ffmpeg-<platform>-<archs joined by ".">-<build id>
+release_tag="ffmpeg-${target_platform}-${resolved_archs}-$(date -u +%Y%m%dt%H%M%S)-${tag_suffix}"
 validate_release_tag "$release_tag"
-
-# ── Build matrix ─────────────────────────────────────────────────────────────
-
-# Every target gets the third-party libraries (deps/*.sh, see scripts/toolchain.sh):
-# Linux x86_64 / arm64 build in a manylinux_2_28 container (glibc 2.28), Linux x86 / armv7
-# are cross-compiled in an Ubuntu 20.04 container (glibc 2.31), Windows is cross-compiled
-# with llvm-mingw on Ubuntu, macOS builds natively.
-manylinux_x64="quay.io/pypa/manylinux_2_28_x86_64"
-manylinux_arm64="quay.io/pypa/manylinux_2_28_aarch64"
-linux32="ubuntu:20.04"
-
-entries=()
-needs_lipo="false"
-
-# add <platform> <runner> <arch> [container] [universal_slice]
-# All values are constants from this script, so plain string formatting yields valid JSON.
-add() {
-  entries+=("$(printf '{"platform":"%s","os":"%s","arch":"%s","deps":"true","container":"%s","universal_slice":"%s"}' \
-    "$1" "$2" "$3" "${4:-}" "${5:-}")")
-}
-
-add_target() {
-  case "$1/$2" in
-    linux/x86_64)   add linux ubuntu-latest x86_64 "$manylinux_x64" ;;
-    linux/arm64)    add linux ubuntu-24.04-arm arm64 "$manylinux_arm64" ;;
-    linux/x86)      add linux ubuntu-latest x86 "$linux32" ;;
-    linux/armv7)    add linux ubuntu-latest armv7 "$linux32" ;;
-    macos/x86_64)   add macos macos-15-intel x86_64 ;;
-    macos/arm64)    add macos macos-15 arm64 ;;
-    windows/x86_64) add windows ubuntu-latest x86_64 ;;
-    windows/x86)    add windows ubuntu-latest x86 ;;
-    windows/arm64)  add windows ubuntu-latest arm64 ;;
-    *) echo "::warning::Skipping unsupported combination $1/$2" ;;
-  esac
-}
-
-case "$target_platform/$target_arch" in
-  macos/universal)
-    add macos macos-15-intel x86_64 "" true
-    add macos macos-15 arm64 "" true
-    # NuGet uses the two slices as osx-x64 / osx-arm64 instead of a merged binary.
-    [[ "$package_format" == "nuget" ]] || needs_lipo="true"
-    ;;
-  linux/universal | windows/universal) add_target "$target_platform" x86_64 ;;
-  linux/all)   for a in x86_64 arm64 x86 armv7; do add_target linux "$a"; done ;;
-  macos/all)   for a in x86_64 arm64; do add_target macos "$a"; done ;;
-  windows/all) for a in x86_64 x86 arm64; do add_target windows "$a"; done ;;
-  *)           add_target "$target_platform" "$target_arch" ;;
-esac
-
-[[ "${#entries[@]}" -gt 0 ]] || fail "$(msg target "${target_platform}/${target_arch}")"
-
-matrix="$(IFS=,; printf '{"include":[%s]}' "${entries[*]}")"
 
 {
   echo "source_repository=https://github.com/${source_slug}"
   echo "source_slug=${source_slug}"
   echo "source_ref=${source_ref}"
   echo "target_platform=${target_platform}"
-  echo "target_arch=${target_arch}"
+  echo "target_arch=${resolved_archs//./,}"
   echo "package_format=${package_format}"
   echo "archive_format=${archive_format}"
   echo "configure_options=${configure_options}"
   echo "release_tag=${release_tag}"
-  echo "matrix=${matrix}"
-  echo "needs_lipo=${needs_lipo}"
+  echo "matrix=${resolved_matrix}"
+  echo "merges=${resolved_merges}"
+  echo "needs_merge=${resolved_needs_merge}"
 } >>"$GITHUB_OUTPUT"
 
-printf 'Resolved %s/%s from %s → %s\n' "$target_platform" "$target_arch" "$source_slug" "$release_tag"
+printf 'Resolved %s/%s from %s → %s\n' "$target_platform" "${resolved_archs//./,}" "$source_slug" "$release_tag"

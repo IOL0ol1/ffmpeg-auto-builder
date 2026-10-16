@@ -41,7 +41,7 @@ body:
     id: target_arch
     attributes:
       label: Target architecture
-      description: "One of: x86_64 / x86 / arm64 / armv7 / universal / all (all: NuGet only)"
+      description: "An architecture of the platform (e.g. x86_64 / x86 / arm64 / armv7 / universal); for NuGet several, comma-separated (e.g. x86_64,arm64)"
       value: x86_64
     validations:
       required: true

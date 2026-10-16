@@ -17,7 +17,7 @@ A template repository for building FFmpeg online with **GitHub Pages + GitHub Is
 - Like the official prebuilt FFmpeg binaries, common **third-party libraries are built from source and linked statically** (x264, x265, libvpx, dav1d, SVT-AV1, libaom, Opus, LAME, Vorbis, WebP, zimg, SoX resampler, libass); each one can be toggled on the page.
 - Linux x86_64 / arm64 builds run on glibc 2.28+ (RHEL 8, Debian 10, Ubuntu 20.04 and newer); Windows x86_64 / x86 / arm64 is cross-compiled with llvm-mingw into self-contained executables; macOS supports 11.0+; Linux x86 / armv7 run on glibc 2.31+ (Debian 11, Ubuntu 20.04 and newer).
 - ccache for incremental builds, a smoke test, and a single draft release per build (with `SHA256SUMS.txt`).
-- Packages as `tar.gz`, `zip` or a **NuGet package** for C++ and C# projects; with the `all` architecture, one NuGet package contains every architecture of the platform.
+- Packages as `tar.gz`, `zip` or a **NuGet package** for C++ and C# projects; one NuGet package can contain any selection of the platform's architectures.
 - Packages work right after extraction: shared builds get fixed rpaths / install names, `.pc` files use relative paths, Windows executables need no extra DLLs, and every package contains `BUILDINFO.txt`.
 - The page lists recent builds, their status and a job/step log summary.
 - The page can be switched between **English / 简体中文 / 日本語** (defaults to the browser language); the generated issue and the workflow's replies use the same language.
@@ -34,17 +34,20 @@ A template repository for building FFmpeg online with **GitHub Pages + GitHub Is
 │       └── deps.yml              # Builds and caches the third-party libraries ahead of time
 ├── deps/                         # One recipe per third-party library (version, URL, SHA256, build steps)
 ├── docs/                         # GitHub Pages site (index.html / app.js / configure.js / i18n.js / styles.css)
+│   └── targets.json              # Build targets: platforms, architectures, runners, constraints
 └── scripts/
     ├── common.sh                 # Shared helpers (repository URL parsing, flag filtering, ...)
     ├── parse-issue.py            # Parses build parameters from an issue body and detects its language
     ├── issue-comment.sh          # Posts the started / invalid / result replies in the issue's language
     ├── resolve-params.sh         # Validates parameters, creates the release tag and build matrix
-    ├── install-deps.sh           # Installs build tools (dnf / apt / brew, llvm-mingw)
-    ├── toolchain.sh              # Per-target toolchain setup shared by the library and FFmpeg builds
+    ├── targets.py                # Reads docs/targets.json: validation, build matrices
+    ├── install-deps.sh           # Installs build tools (platform_install)
+    ├── toolchain.sh              # Toolchain setup shared by the library and FFmpeg builds (platform_toolchain)
+    ├── platforms/<platform>.sh   # Per-platform build tools and toolchain
     ├── build-deps.sh             # Builds deps/*.sh into a static library prefix
     ├── build-ffmpeg.sh           # Builds, fixes install paths, runs the smoke test and packages
-    ├── pack-nuget.py             # Combines the platform archives into one NuGet package
-    └── lipo-universal.sh         # Merges x86_64 + arm64 packages into a macOS universal binary
+    ├── pack-nuget.py             # Combines the architecture archives into one NuGet package
+    └── merge-slices.sh           # Merges single-architecture packages into a universal binary with lipo
 ```
 
 ## Getting started
@@ -145,14 +148,14 @@ Open **Actions → build-ffmpeg → Run workflow** and fill in the same paramete
 | windows  | arm64        | ubuntu-latest                | llvm-mingw cross-compile, third-party libraries |
 
 > - `universal` (macOS, `tar.gz` / `zip`) merges x86_64 and arm64 into fat binaries.
-> - `all` (NuGet only) builds every architecture of the platform in parallel and packs them into one NuGet package: Linux x86_64 / x86 / arm64 / armv7, macOS x86_64 / arm64, Windows x86_64 / x86 / arm64.
+> - With NuGet, the architecture becomes a multi-select: every checked architecture is built in parallel and packed into one NuGet package (`universal` is not offered there; check x86_64 and arm64 instead).
 > - If some architectures fail, the successful packages are still published to the draft release.
 
 ## NuGet package
 
-With **Package format = NuGet**, the release contains one `.nupkg` instead of archives. With architecture **all**, every architecture of the platform goes into the same package. NuGet packages always use **shared linking** (the page locks the linking option, and the workflow appends `--enable-shared --disable-static`).
+With **Package format = NuGet**, the release contains one `.nupkg` instead of archives. Check the architectures to include; they all go into the same package. NuGet packages always use **shared linking** (the page locks the linking option, and the workflow appends `--enable-shared --disable-static`).
 
-- **Package ID**: `<repository owner>.FFmpeg.<license>.<platform>`. The license is `GPL`, `LGPL`, `GPLv3`, `LGPLv3` or `NonFree`; the platform is the RID for a single architecture (`win-x64`, `linux-arm`, …) and `win` / `linux` / `osx` for architecture `all`. For example `IOL0ol1.FFmpeg.LGPL.win-x64` or `IOL0ol1.FFmpeg.GPL.linux`. **Version**: the FFmpeg version from the source's `RELEASE` file plus the workflow run number, e.g. `8.0.0.57`.
+- **Package ID**: `<repository owner>.FFmpeg.<license>.<platform>`. The license is `GPL`, `LGPL`, `GPLv3`, `LGPLv3` or `NonFree`; the platform is the RID for a single architecture (`win-x64`, `linux-arm`, …) and the platform name (`win` / `linux` / `osx`) for several architectures. For example `IOL0ol1.FFmpeg.LGPL.win-x64` or `IOL0ol1.FFmpeg.GPL.linux`. **Version**: the FFmpeg version from the source's `RELEASE` file plus the workflow run number, e.g. `8.0.0.57`.
 - **License expression** follows the configure flags (`LGPL-2.1-or-later`, `GPL-2.0-or-later`, or the `-3.0` variants with `--enable-version3`).
 
 ```text
@@ -164,7 +167,7 @@ lib/netstandard2.0/_._         marks the package as compatible with .NET project
 README.md                      package readme
 ```
 
-RIDs: `linux-x64`, `linux-x86`, `linux-arm64`, `linux-arm`, `osx-x64`, `osx-arm64`, `win-x64`, `win-x86`, `win-arm64` (macOS `all` contributes `osx-x64` and `osx-arm64`).
+RIDs: `linux-x64`, `linux-x86`, `linux-arm64`, `linux-arm`, `osx-x64`, `osx-arm64`, `win-x64`, `win-x86`, `win-arm64` (from `docs/targets.json`).
 
 NuGet packages cannot contain symlinks, so on Linux / macOS `build/native/<rid>/lib/` holds `libavcodec.so` + `libavcodec.so.63` (`libavcodec.dylib` + `libavcodec.63.dylib`) as regular files and leaves out the full-version name, which nothing refers to.
 
@@ -231,7 +234,7 @@ The page turns common configure switches into visual controls and builds the fla
   - **License**: GPL-only components (such as the `hqdn3d`, `delogo`, `eq`, `cropdetect` and `mpdecimate` filters) carry a **GPL** badge and are greyed out under LGPL.
   - **Library dependencies**: with libswscale / libswresample disabled, the `scale` / `aresample` filters are greyed out in slim mode.
   - **Target platform**: the `https` protocol is unavailable for Linux targets (the Linux build environment has no TLS library).
-  - **Third-party libraries**: x264 / x265 (GPL) are unavailable under LGPL, SVT-AV1 is 64-bit only, so it is unavailable for Linux / Windows x86, Linux armv7 and `all` on Linux / Windows.
+  - **Third-party libraries**: x264 / x265 (GPL) are unavailable under LGPL, SVT-AV1 is 64-bit only, so it is unavailable for Linux / Windows x86 and Linux armv7 (also when a NuGet selection includes one of them).
   - **Slim mode**: the `file` protocol is always kept so local files can be read and written.
   - Hover over a greyed-out option to see why; when the restriction is lifted (e.g. switching back to GPL), the earlier selection comes back.
 - **Why there is no GPL v3**: no built-in FFmpeg component requires version3; it only affects third-party libraries such as opencore-amr and mbedtls. The build environment has none of them, so only LGPL / GPL are offered; add `--enable-version3` as a custom flag if needed.

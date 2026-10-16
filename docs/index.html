@@ -58,21 +58,24 @@
           <label>
             <span data-i18n="form.platform">Target platform</span>
             <select id="target-platform" name="targetPlatform">
-              <option value="linux">Linux</option>
-              <option value="macos">macOS</option>
-              <option value="windows">Windows</option>
+              <!-- populated from targets.json -->
             </select>
           </label>
 
-          <label>
+          <label id="target-arch-field">
             <span data-i18n="form.arch">Target architecture</span>
             <select id="target-arch" name="targetArch">
-              <!-- populated dynamically based on selected platform -->
+              <!-- populated from targets.json for the selected platform -->
             </select>
           </label>
         </div>
         <!-- Outside the grid so a long note cannot change the height of the fields above. -->
         <small id="package-hint" class="muted"></small>
+        <!-- NuGet: one package for several architectures, picked here instead of the select. -->
+        <fieldset id="target-arch-multi" class="arch-multi" hidden>
+          <legend data-i18n="form.arch.multi">Target architectures</legend>
+          <div id="target-arch-list" class="choices chips"></div>
+        </fieldset>
 
         <fieldset class="config">
           <legend data-i18n="config.legend">Build options</legend>

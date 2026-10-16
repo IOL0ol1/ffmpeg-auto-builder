@@ -2,6 +2,7 @@
 DEP_VERSION=1.3.2
 DEP_URL="https://github.com/madler/zlib/releases/download/v${DEP_VERSION}/zlib-${DEP_VERSION}.tar.gz"
 DEP_SHA256=bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16
+DEP_FEATURE=  # always built
 
 dep_build() {
   fetch_source

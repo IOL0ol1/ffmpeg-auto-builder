@@ -17,7 +17,7 @@
 - 参照官方预编译版本的做法，**从源码编译常用第三方库并静态链接**（x264、x265、libvpx、dav1d、SVT-AV1、libaom、Opus、LAME、Vorbis、WebP、zimg、SoX 重采样、libass），每个库都可以在网页上开关。
 - Linux x86_64 / arm64 产物兼容 glibc 2.28+（RHEL 8、Debian 10、Ubuntu 20.04 及更新版本）；Windows x86_64 / x86 / arm64 用 llvm-mingw 交叉编译，生成不依赖额外 DLL 的可执行文件；macOS 支持 11.0+；Linux x86 / armv7 兼容 glibc 2.31+（Debian 11、Ubuntu 20.04 及更新版本）。
 - ccache 增量编译、冒烟测试、统一发布一个 Draft Release（附 `SHA256SUMS.txt`）。
-- 打包格式支持 `tar.gz`、`zip` 和可用于 C++ / C# 项目的 **NuGet 包**；指令集选择 `all` 时，一个 NuGet 包包含该平台的所有指令集。
+- 打包格式支持 `tar.gz`、`zip` 和可用于 C++ / C# 项目的 **NuGet 包**；一个 NuGet 包可以包含该平台任意勾选的多个指令集。
 - 产物可直接解压使用：共享库构建自动修正 rpath / install name，`.pc` 文件改为相对路径，Windows 可执行文件不依赖额外 DLL，包内附 `BUILDINFO.txt`。
 - 网页展示最近的编译记录、运行状态和 Job/Step 日志摘要。
 - 网页支持 **English / 简体中文 / 日本語** 切换（默认跟随浏览器语言），生成的 Issue 以及工作流在 Issue 中的回复都会使用同一语言。
@@ -34,17 +34,20 @@
 │       └── deps.yml              # 预先编译并缓存第三方库
 ├── deps/                         # 每个第三方库一个编译脚本（版本、下载地址、SHA256、编译步骤）
 ├── docs/                         # GitHub Pages 前端（index.html / app.js / configure.js / i18n.js / styles.css）
+│   └── targets.json              # 编译目标：平台、指令集、runner、约束条件
 └── scripts/
     ├── common.sh                 # 公共工具函数（仓库地址解析、参数过滤等）
     ├── parse-issue.py            # 从 Issue 正文解析编译参数并识别语言
     ├── issue-comment.sh          # 按 Issue 语言回复开始 / 校验失败 / 编译结果
     ├── resolve-params.sh         # 校验参数、生成 release tag 与构建矩阵
-    ├── install-deps.sh           # 安装编译工具（dnf / apt / brew、llvm-mingw）
-    ├── toolchain.sh              # 各目标平台的工具链配置，第三方库与 FFmpeg 共用
+    ├── targets.py                # 读取 docs/targets.json：参数校验、构建矩阵
+    ├── install-deps.sh           # 安装编译工具（platform_install）
+    ├── toolchain.sh              # 工具链配置，第三方库与 FFmpeg 共用（platform_toolchain）
+    ├── platforms/<平台>.sh        # 各平台的编译工具与工具链
     ├── build-deps.sh             # 把 deps/*.sh 编译成静态库
     ├── build-ffmpeg.sh           # 编译、修正产物路径、冒烟测试并打包
-    ├── pack-nuget.py             # 将各平台压缩包合并为一个 NuGet 包
-    └── lipo-universal.sh         # 将 x86_64 + arm64 包合并为 macOS 通用二进制
+    ├── pack-nuget.py             # 将各指令集的压缩包合并为一个 NuGet 包
+    └── merge-slices.sh           # 用 lipo 把单指令集的包合并为通用二进制
 ```
 
 ## 使用教程
@@ -145,14 +148,14 @@ BUILDINFO.txt   源码仓库、ref、commit、编译器、configure 参数
 | windows | arm64     | ubuntu-latest                | llvm-mingw 交叉编译，含第三方库       |
 
 > - `universal`（macOS，`tar.gz` / `zip`）把 x86_64 和 arm64 合并为通用二进制。
-> - `all`（仅 NuGet）并行编译该平台的所有指令集并打进同一个 NuGet 包：Linux x86_64 / x86 / arm64 / armv7，macOS x86_64 / arm64，Windows x86_64 / x86 / arm64。
+> - 打包格式为 NuGet 时，指令集变为多选：勾选的指令集并行编译，并打进同一个 NuGet 包（NuGet 下不提供 `universal`，请同时勾选 x86_64 和 arm64）。
 > - 部分指令集失败时，成功的产物仍会发布到 Draft Release。
 
 ## NuGet 包
 
-**打包格式选择 NuGet** 时，Release 中是一个 `.nupkg`，而不是压缩包；指令集选择 **all** 时，该平台的所有指令集合并在同一个包中。NuGet 包固定使用**共享库**（网页会锁定链接方式，工作流也会追加 `--enable-shared --disable-static`）。
+**打包格式选择 NuGet** 时，Release 中是一个 `.nupkg`，而不是压缩包；勾选需要包含的指令集，它们会放进同一个包中。NuGet 包固定使用**共享库**（网页会锁定链接方式，工作流也会追加 `--enable-shared --disable-static`）。
 
-- **包 ID**：`<仓库所有者>.FFmpeg.<许可证>.<平台>`。许可证为 `GPL`、`LGPL`、`GPLv3`、`LGPLv3` 或 `NonFree`；单一指令集时平台为 RID（`win-x64`、`linux-arm` 等），指令集为 `all` 时为 `win` / `linux` / `osx`。如 `IOL0ol1.FFmpeg.LGPL.win-x64`、`IOL0ol1.FFmpeg.GPL.linux`。**版本**：源码 `RELEASE` 文件中的 FFmpeg 版本加上工作流运行编号，如 `8.0.0.57`。
+- **包 ID**：`<仓库所有者>.FFmpeg.<许可证>.<平台>`。许可证为 `GPL`、`LGPL`、`GPLv3`、`LGPLv3` 或 `NonFree`；单一指令集时平台为 RID（`win-x64`、`linux-arm` 等），多个指令集时为平台名（`win` / `linux` / `osx`）。如 `IOL0ol1.FFmpeg.LGPL.win-x64`、`IOL0ol1.FFmpeg.GPL.linux`。**版本**：源码 `RELEASE` 文件中的 FFmpeg 版本加上工作流运行编号，如 `8.0.0.57`。
 - **许可证表达式**按 configure 参数确定（`LGPL-2.1-or-later`、`GPL-2.0-or-later`，带 `--enable-version3` 时为对应的 `-3.0` 版本）。
 
 ```text
@@ -164,7 +167,7 @@ lib/netstandard2.0/_._         让 .NET 项目可以安装此包
 README.md                      包说明
 ```
 
-RID：`linux-x64`、`linux-x86`、`linux-arm64`、`linux-arm`、`osx-x64`、`osx-arm64`、`win-x64`、`win-x86`、`win-arm64`（macOS `all` 会分别放入 `osx-x64` 和 `osx-arm64`）。
+RID：`linux-x64`、`linux-x86`、`linux-arm64`、`linux-arm`、`osx-x64`、`osx-arm64`、`win-x64`、`win-x86`、`win-arm64`（来自 `docs/targets.json`）。
 
 NuGet 包不能包含符号链接，因此 Linux / macOS 的 `build/native/<rid>/lib/` 中以普通文件保存 `libavcodec.so` + `libavcodec.so.63`（`libavcodec.dylib` + `libavcodec.63.dylib`），省略没有被引用的完整版本号文件。
 
@@ -231,7 +234,7 @@ static extern IntPtr av_version_info();
   - **许可证**：仅限 GPL 的组件（如 `hqdn3d`、`delogo`、`eq`、`cropdetect`、`mpdecimate` 滤镜）带 **GPL** 标记，选择 LGPL 时变灰不可选。
   - **库依赖**：关闭 libswscale / libswresample 后，精简模式中的 `scale` / `aresample` 滤镜变灰不可选。
   - **目标平台**：目标平台为 Linux 时 `https` 协议不可选（Linux 编译环境没有 TLS 库）。
-  - **第三方库**：x264 / x265（GPL）在 LGPL 下不可选；SVT-AV1 仅支持 64 位，在 Linux / Windows x86、Linux armv7 以及 Linux / Windows 的 `all` 下不可选。
+  - **第三方库**：x264 / x265（GPL）在 LGPL 下不可选；SVT-AV1 仅支持 64 位，在 Linux / Windows x86、Linux armv7 下不可选（NuGet 勾选的指令集中包含它们时同样不可选）。
   - **精简模式**：`file` 协议固定保留，保证能读写本地文件。
   - 灰色选项悬停可查看原因；限制解除后（如切回 GPL），之前的勾选会自动恢复。
 - **为什么没有 GPL v3**：FFmpeg 自带组件中没有任何一个要求 version3，它只影响 opencore-amr、mbedtls 等第三方库。编译环境没有这些库，因此只提供 LGPL / GPL；需要时可在自定义参数中写 `--enable-version3`。

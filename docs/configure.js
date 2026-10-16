@@ -1,8 +1,41 @@
 // Visual model of FFmpeg configure options. Display texts live in i18n.js, keyed by the
 // ids used here (segment.*, option.*, toggleGroup.*, toggle.*, component.*, reason.*, note.*).
-// The build runners install no third-party libraries, so every option here only uses
-// features built into FFmpeg itself. Invalid combinations are made unselectable in the
-// UI (disabled options, linked dependencies) instead of being validated after the fact.
+// Build targets and what each can build come from targets.json, shared with the workflow.
+// Invalid combinations are made unselectable in the UI (disabled options, linked
+// dependencies) instead of being validated after the fact.
+import TARGETS from './targets.json' with { type: 'json' };
+
+export const PLATFORMS = TARGETS.platforms;
+
+// ── Targets ──────────────────────────────────────────────────────────────────
+
+// context: { platform, archs, packageFormat } — the selected target and package format;
+// archs holds one architecture, or several for NuGet.
+
+// NuGet packages need shared libraries.
+export function platformStatus(platform, packageFormat) {
+  const linkage = PLATFORMS[platform]?.linkage;
+  if (packageFormat === 'nuget' && linkage && !linkage.includes('shared')) return { available: false, reason: 'nugetPlatform' };
+  return { available: true };
+}
+
+// Architectures offered for a platform. NuGet packs separate architectures, so merged ones
+// (macOS universal) are not offered there.
+export function archChoices(platform, packageFormat) {
+  return Object.entries(PLATFORMS[platform]?.archs || {})
+    .filter(([, spec]) => !(packageFormat === 'nuget' && spec.merge))
+    .map(([id, spec]) => ({ id, label: spec.label }));
+}
+
+// Specs of the selected architectures; a merged architecture counts as its parts.
+function selectedArchSpecs(context) {
+  const archs = PLATFORMS[context.platform]?.archs || {};
+  return (context.archs || [])
+    .flatMap((id) => archs[id]?.merge || [id])
+    .map((id) => archs[id])
+    .filter(Boolean);
+}
+
 
 // Mutually exclusive choices, rendered as segmented controls.
 export const SEGMENTS = [
@@ -38,17 +71,16 @@ export const SEGMENTS = [
 ];
 
 // On/off switches. `on` / `off` are the flags emitted for each state;
-// `requires` lists toggles that must stay enabled while this one is enabled.
-// SVT-AV1 is 64-bit only; "all" builds every architecture of the platform, so it must be
-// available on each of them.
-const SVTAV1_EXCLUDED = ['windows/x86', 'linux/x86', 'linux/armv7', 'windows/all', 'linux/all'];
+// `requires` lists toggles that must stay enabled while this one is enabled; `program`
+// marks the executables, which some targets cannot build. Libraries a target cannot build
+// are listed as "unavailable" in targets.json.
 
 export const TOGGLE_GROUPS = [
   {
     id: 'programs',
     items: [
-      { id: 'ffmpeg', default: true, off: ['--disable-ffmpeg'], requires: ['avfilter'] },
-      { id: 'ffprobe', default: true, off: ['--disable-ffprobe'] },
+      { id: 'ffmpeg', default: true, off: ['--disable-ffmpeg'], requires: ['avfilter'], program: true },
+      { id: 'ffprobe', default: true, off: ['--disable-ffprobe'], program: true },
       { id: 'avdevice', default: true, off: ['--disable-avdevice'] },
       { id: 'avfilter', default: true, off: ['--disable-avfilter'] },
       { id: 'swscale', default: true, off: ['--disable-swscale'] },
@@ -76,7 +108,7 @@ export const TOGGLE_GROUPS = [
       { id: 'x265', default: true, on: ['--enable-libx265'], gpl: true },
       { id: 'libvpx', default: true, on: ['--enable-libvpx'] },
       { id: 'dav1d', default: true, on: ['--enable-libdav1d'] },
-      { id: 'svtav1', default: true, on: ['--enable-libsvtav1'], excludedTargets: SVTAV1_EXCLUDED },
+      { id: 'svtav1', default: true, on: ['--enable-libsvtav1'] },
       { id: 'aom', default: true, on: ['--enable-libaom'] },
       { id: 'opus', default: true, on: ['--enable-libopus'] },
       { id: 'mp3lame', default: true, on: ['--enable-libmp3lame'] },
@@ -98,8 +130,8 @@ const toggleById = (id) => TOGGLES.find((item) => item.id === id);
 
 // Component whitelists used in "slim" mode (--disable-everything + --enable-<kind>=...).
 // `locked` items are always included in slim mode; `rules` make items unavailable:
-//   gpl: needs the GPL license; needs: needs a library toggle; platforms: target platforms
-//   where the item can actually be built.
+//   gpl: needs the GPL license; needs: needs a library toggle; tls: needs a TLS library,
+//   which targets.json marks per platform.
 export const COMPONENT_GROUPS = [
   {
     id: 'decoder',
@@ -137,7 +169,7 @@ export const COMPONENT_GROUPS = [
     defaults: ['file', 'pipe'],
     locked: ['file'],
     rules: {
-      https: { platforms: ['macos', 'windows'], reason: 'tls' },
+      https: { tls: true, reason: 'tls' },
     },
   },
   {
@@ -204,11 +236,14 @@ export function normalizeConfig(raw) {
 
 // ── Availability ─────────────────────────────────────────────────────────────
 
-// context: { platform, packageFormat } — the selected target platform and package format.
 export function segmentOptionStatus(context, segmentId, optionId) {
   const option = SEGMENTS.find((segment) => segment.id === segmentId).options.find((item) => item.id === optionId);
   if (option?.excludedFormats?.includes(context.packageFormat)) {
     return { available: false, reason: `${context.packageFormat}Shared` };
+  }
+  const linkage = PLATFORMS[context.platform]?.linkage;
+  if (segmentId === 'linkage' && linkage && !linkage.includes(optionId)) {
+    return { available: false, reason: 'targetLinkage' };
   }
   return { available: true };
 }
@@ -234,7 +269,7 @@ export function componentStatus(config, context, groupId, name) {
   if (rule?.needs && !config.toggles[rule.needs]) {
     return { available: false, reason: 'needs', needs: rule.needs };
   }
-  if (rule?.platforms && context.platform && !rule.platforms.includes(context.platform)) {
+  if (rule?.tls && PLATFORMS[context.platform]?.tls === false) {
     return { available: false, reason: rule.reason };
   }
   return { available: true };
@@ -252,11 +287,12 @@ export function effectiveComponents(config, context, groupId) {
   return group.items.filter((name) => selected.has(name) && componentStatus(config, context, groupId, name).available);
 }
 
-// context: { platform, arch, packageFormat }. `reason` is translated as reason.<code>.
+// `reason` is translated as reason.<code>. With several architectures (NuGet) a library
+// must be available on each of them.
 export function toggleStatus(config, context, id) {
   const item = toggleById(id);
-  const target = `${context.platform}/${context.arch}`;
-  if (item.excludedTargets?.includes(target)) return { available: false, reason: 'target' };
+  if (item.program && PLATFORMS[context.platform]?.programs === false) return { available: false, reason: 'targetPrograms' };
+  if (selectedArchSpecs(context).some((spec) => spec.unavailable?.includes(id))) return { available: false, reason: 'target' };
   if (item.gpl && config.license !== 'gpl') return { available: false, reason: 'gpl' };
   return { available: true };
 }

@@ -41,7 +41,7 @@ body:
     id: target_arch
     attributes:
       label: 目标指令集
-      description: "可选值：x86_64 / x86 / arm64 / armv7 / universal / all（all 仅限 NuGet）"
+      description: "该平台的指令集（如 x86_64 / x86 / arm64 / armv7 / universal）；NuGet 可用逗号分隔填写多个（如 x86_64,arm64）"
       value: x86_64
     validations:
       required: true

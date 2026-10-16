@@ -1,0 +1,45 @@
+{
+  "$comment": [
+    "Build targets: the single source of truth for the page (docs/configure.js), the workflow",
+    "(scripts/targets.py) and the NuGet packer. Platform and architecture ids contain no '-'.",
+    "platform: label, nuget (NuGet id suffix for several RIDs), tls (https protocol available),",
+    "  linkage (allowed linkage options, default all; NuGet needs 'shared'), programs (false:",
+    "  ffmpeg / ffprobe cannot be built).",
+    "arch: label, rid (NuGet runtime identifier), runner, container, unavailable (library",
+    "  toggle ids of docs/configure.js that cannot be built), merge (built from these archs",
+    "  and merged with lipo; not offered for NuGet)."
+  ],
+  "platforms": {
+    "linux": {
+      "label": "Linux",
+      "nuget": "linux",
+      "tls": false,
+      "archs": {
+        "x86_64": { "label": "x86_64", "rid": "linux-x64", "runner": "ubuntu-latest", "container": "quay.io/pypa/manylinux_2_28_x86_64" },
+        "x86": { "label": "x86 (32-bit)", "rid": "linux-x86", "runner": "ubuntu-latest", "container": "ubuntu:20.04", "unavailable": ["svtav1"] },
+        "arm64": { "label": "arm64 (AArch64)", "rid": "linux-arm64", "runner": "ubuntu-24.04-arm", "container": "quay.io/pypa/manylinux_2_28_aarch64" },
+        "armv7": { "label": "armv7 (ARM 32-bit)", "rid": "linux-arm", "runner": "ubuntu-latest", "container": "ubuntu:20.04", "unavailable": ["svtav1"] }
+      }
+    },
+    "macos": {
+      "label": "macOS",
+      "nuget": "osx",
+      "tls": true,
+      "archs": {
+        "x86_64": { "label": "x86_64 (Intel)", "rid": "osx-x64", "runner": "macos-15-intel" },
+        "arm64": { "label": "arm64 (Apple Silicon)", "rid": "osx-arm64", "runner": "macos-15" },
+        "universal": { "label": "Universal (fat binary)", "merge": ["x86_64", "arm64"] }
+      }
+    },
+    "windows": {
+      "label": "Windows",
+      "nuget": "win",
+      "tls": true,
+      "archs": {
+        "x86_64": { "label": "x86_64", "rid": "win-x64", "runner": "ubuntu-latest" },
+        "x86": { "label": "x86 (32-bit)", "rid": "win-x86", "runner": "ubuntu-latest", "unavailable": ["svtav1"] },
+        "arm64": { "label": "arm64 (AArch64)", "rid": "win-arm64", "runner": "ubuntu-latest" }
+      }
+    }
+  }
+}

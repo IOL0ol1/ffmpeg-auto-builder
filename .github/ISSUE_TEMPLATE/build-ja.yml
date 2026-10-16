@@ -41,7 +41,7 @@ body:
     id: target_arch
     attributes:
       label: ターゲットアーキテクチャ
-      description: "x86_64 / x86 / arm64 / armv7 / universal / all のいずれか（all は NuGet のみ）"
+      description: "プラットフォームのアーキテクチャ（例：x86_64 / x86 / arm64 / armv7 / universal）。NuGet ではカンマ区切りで複数指定できます（例：x86_64,arm64）"
       value: x86_64
     validations:
       required: true

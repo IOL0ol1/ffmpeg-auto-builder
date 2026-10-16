@@ -1,7 +1,7 @@
 import {
-  COMPONENT_GROUPS, SEGMENTS, TOGGLE_GROUPS,
-  buildConfigure, componentStatus, defaultConfig, effectiveComponents, effectiveSegmentValue, effectiveToggle,
-  normalizeConfig, requiresGpl, sanitizeCustom, segmentOptionStatus, setToggle, toggleStatus,
+  COMPONENT_GROUPS, PLATFORMS, SEGMENTS, TOGGLE_GROUPS,
+  archChoices, buildConfigure, componentStatus, defaultConfig, effectiveComponents, effectiveSegmentValue, effectiveToggle,
+  normalizeConfig, platformStatus, requiresGpl, sanitizeCustom, segmentOptionStatus, setToggle, toggleStatus,
 } from './configure.js';
 import {
   LANGUAGES, detectLanguage, getLanguage, setLanguage, t, translateStatic,
@@ -27,6 +27,9 @@ const formMessageNode = document.querySelector('#form-message');
 const buildListNode = document.querySelector('#build-list');
 const targetPlatformSelect = document.querySelector('#target-platform');
 const targetArchSelect = document.querySelector('#target-arch');
+const targetArchField = document.querySelector('#target-arch-field');
+const targetArchMulti = document.querySelector('#target-arch-multi');
+const targetArchList = document.querySelector('#target-arch-list');
 const packageFormatSelect = document.querySelector('#package-format');
 const packageHintNode = document.querySelector('#package-hint');
 
@@ -153,30 +156,80 @@ function renderRepositoryInfo() {
 
 // ── Form helpers ────────────────────────────────────────────────────────────
 
-// Labels are technical names except the few that need translation. NuGet packs every
-// architecture of a platform into one package ("all"); the other formats can merge the two
-// macOS architectures into a fat binary ("universal").
-function archOptions(platform, packageFormat) {
-  const merged = packageFormat === 'nuget'
-    ? [['all', t('arch.all')]]
-    : platform === 'macos' ? [['universal', 'Universal (fat binary)']] : [];
-  return [...({
-    linux: [['x86_64', 'x86_64'], ['x86', 'x86 (32-bit)'], ['arm64', 'arm64 (AArch64)'], ['armv7', 'armv7 (ARM 32-bit)']],
-    macos: [['x86_64', 'x86_64 (Intel)'], ['arm64', 'arm64 (Apple Silicon)']],
-    windows: [['x86_64', 'x86_64'], ['x86', 'x86 (32-bit)'], ['arm64', 'arm64 (AArch64)']],
-  }[platform] || []), ...merged];
+// Platforms and architectures come from targets.json; their labels are technical names.
+// Keeps the current platform when the package format still allows it.
+function updatePlatformOptions() {
+  const current = targetPlatformSelect.value;
+  const options = Object.entries(PLATFORMS).map(([id, spec]) => {
+    const status = platformStatus(id, packageFormatSelect.value);
+    const opt = document.createElement('option');
+    opt.value = id;
+    opt.textContent = spec.label;
+    opt.disabled = !status.available;
+    opt.title = status.available ? '' : t(`reason.${status.reason}`);
+    return opt;
+  });
+  targetPlatformSelect.replaceChildren(...options);
+  const keep = options.find((opt) => opt.value === current && !opt.disabled) || options.find((opt) => !opt.disabled);
+  if (keep) targetPlatformSelect.value = keep.value;
 }
 
-// Keeps the current architecture when the new platform / format still offers it.
+// NuGet architectures picked per platform, kept while switching platforms or formats.
+const nugetArchs = {};
+
+// One architecture from a select, or (NuGet) several from checkboxes. Keeps the current
+// architecture when the new platform / format still offers it.
 function updateArchOptions() {
+  const platform = targetPlatformSelect.value;
+  const nuget = packageFormatSelect.value === 'nuget';
+  const choices = archChoices(platform, packageFormatSelect.value);
   const current = targetArchSelect.value;
-  targetArchSelect.replaceChildren(...archOptions(targetPlatformSelect.value, packageFormatSelect.value).map(([value, label]) => {
-    const opt = document.createElement('option');
-    opt.value = value;
-    opt.textContent = label;
-    opt.selected = value === current;
-    return opt;
+  targetArchField.hidden = nuget;
+  targetArchMulti.hidden = !nuget;
+  if (!nuget) {
+    targetArchSelect.replaceChildren(...choices.map(({ id, label }) => {
+      const opt = document.createElement('option');
+      opt.value = id;
+      opt.textContent = label;
+      opt.selected = id === current;
+      return opt;
+    }));
+    return;
+  }
+
+  const ids = choices.map((choice) => choice.id);
+  const picked = (nugetArchs[platform] || [current]).filter((id) => ids.includes(id));
+  nugetArchs[platform] = picked.length ? picked : ids.slice(0, 1);
+  targetArchList.replaceChildren(...choices.map(({ id, label }) => {
+    const chip = makeChip(label, (checked) => {
+      const others = nugetArchs[platform].filter((arch) => arch !== id);
+      nugetArchs[platform] = checked ? [...others, id] : others;
+      syncArchChips();
+      syncConfigUI();
+    });
+    chip.dataset.arch = id;
+    return chip;
   }));
+  syncArchChips();
+}
+
+function syncArchChips() {
+  const picked = nugetArchs[targetPlatformSelect.value] || [];
+  targetArchList.querySelectorAll('[data-arch]').forEach((chip) => {
+    const input = chip.querySelector('input');
+    input.checked = picked.includes(chip.dataset.arch);
+    // The last selected architecture cannot be cleared.
+    const last = input.checked && picked.length === 1;
+    input.disabled = last;
+    chip.title = last ? t('form.arch.lastOne') : '';
+  });
+}
+
+// The selected architectures in targets.json order.
+function selectedArchs() {
+  if (packageFormatSelect.value !== 'nuget') return [targetArchSelect.value];
+  const picked = nugetArchs[targetPlatformSelect.value] || [];
+  return archChoices(targetPlatformSelect.value, 'nuget').map((choice) => choice.id).filter((id) => picked.includes(id));
 }
 
 // ── configure option builder ────────────────────────────────────────────────
@@ -186,7 +239,7 @@ function updateArchOptions() {
 // unavailable in the controls themselves instead of being validated afterwards.
 
 function configContext() {
-  return { platform: targetPlatformSelect.value, arch: targetArchSelect.value, packageFormat: packageFormatSelect.value };
+  return { platform: targetPlatformSelect.value, archs: selectedArchs(), packageFormat: packageFormatSelect.value };
 }
 
 function loadSavedConfig() {
@@ -466,7 +519,7 @@ function readForm() {
     sourceRepository: value('sourceRepository'),
     sourceRef: value('sourceRef'),
     targetPlatform: value('targetPlatform'),
-    targetArch: value('targetArch'),
+    targetArch: selectedArchs().join(','),
     packageFormat: value('packageFormat'),
     configureOptions: buildConfigure(state.config, configContext()).options,
   };
@@ -733,6 +786,7 @@ function applyLanguage(id) {
   setLanguage(id);
   langSelect.value = getLanguage().id;
   translateStatic();
+  updatePlatformOptions();
   updateArchOptions();
   renderConfigControls();
   syncConfigUI();
@@ -759,7 +813,8 @@ targetPlatformSelect.addEventListener('change', () => {
   syncConfigUI(); // platform-specific components (e.g. https) may change availability
 });
 packageFormatSelect.addEventListener('change', () => {
-  updateArchOptions(); // "all" is NuGet only, "universal" is not offered for NuGet
+  updatePlatformOptions(); // NuGet needs shared libraries, which some platforms lack
+  updateArchOptions(); // NuGet picks several architectures, without merged ones
   syncConfigUI(); // NuGet allows shared linking only
 });
 targetArchSelect.addEventListener('change', syncConfigUI); // third-party libraries depend on the target

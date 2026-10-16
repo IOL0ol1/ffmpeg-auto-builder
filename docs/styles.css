@@ -98,6 +98,21 @@ small,
   display: none;
 }
 
+.arch-multi {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 12px 16px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  min-width: 0;
+}
+
+.arch-multi legend {
+  padding: 0 6px;
+  font-weight: 600;
+}
+
 .grid {
   display: grid;
   gap: 16px;

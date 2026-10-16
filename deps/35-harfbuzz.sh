@@ -2,6 +2,7 @@
 DEP_VERSION=14.6.0
 DEP_URL="https://github.com/harfbuzz/harfbuzz/releases/download/${DEP_VERSION}/harfbuzz-${DEP_VERSION}.tar.xz"
 DEP_SHA256=d07a007327277708a2a73ae437887cdbaf282937f6d03ca5467723e9099af586
+DEP_FEATURE=libass
 
 dep_build() {
   fetch_source

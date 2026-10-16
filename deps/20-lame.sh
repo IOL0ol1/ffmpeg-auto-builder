@@ -2,6 +2,7 @@
 DEP_VERSION=3.100
 DEP_URL="https://downloads.sourceforge.net/project/lame/lame/${DEP_VERSION}/lame-${DEP_VERSION}.tar.gz"
 DEP_SHA256=ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e
+DEP_FEATURE=mp3lame
 
 dep_build() {
   fetch_source

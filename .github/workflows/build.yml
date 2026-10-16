@@ -33,16 +33,9 @@ on:
           - macos
           - windows
       target_arch:
-        description: Target architecture (universal = macOS fat binary; all = every architecture of the platform, NuGet only)
+        description: Target architecture (see docs/targets.json); for NuGet a comma-separated list, e.g. x86_64,arm64
         required: true
-        type: choice
-        options:
-          - x86_64
-          - x86
-          - arm64
-          - armv7
-          - universal
-          - all
+        type: string
         default: x86_64
       configure_options:
         description: FFmpeg configure options
@@ -84,7 +77,8 @@ jobs:
       configure_options: ${{ steps.params.outputs.configure_options }}
       release_tag: ${{ steps.params.outputs.release_tag }}
       matrix: ${{ steps.params.outputs.matrix }}
-      needs_lipo: ${{ steps.params.outputs.needs_lipo }}
+      merges: ${{ steps.params.outputs.merges }}
+      needs_merge: ${{ steps.params.outputs.needs_merge }}
       lang: ${{ steps.lang.outputs.lang }}
     steps:
       - name: Check out repository
@@ -144,7 +138,7 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
-    # Linux x86_64 / arm64 build in a manylinux_2_28 container, Linux x86 / armv7 in Ubuntu 20.04.
+    # Runner and container of each target come from docs/targets.json.
     container: ${{ matrix.container }}
     timeout-minutes: 240
     env:
@@ -194,23 +188,20 @@ jobs:
         shell: bash
         run: |
           echo "CCACHE_DIR=$GITHUB_WORKSPACE/.ccache" >> "$GITHUB_ENV"
-          if [[ "${{ matrix.deps }}" == "true" ]]; then
-            echo "DEPS_PREFIX=$GITHUB_WORKSPACE/.deps/prefix" >> "$GITHUB_ENV"
-          fi
-          echo "toolchain=${{ hashFiles('scripts/build-deps.sh', 'scripts/toolchain.sh', 'scripts/install-deps.sh') }}" >> "$GITHUB_OUTPUT"
+          echo "DEPS_PREFIX=$GITHUB_WORKSPACE/.deps/prefix" >> "$GITHUB_ENV"
+          # Toolchain changes of one platform do not invalidate the others' libraries.
+          echo "toolchain=${{ hashFiles('scripts/build-deps.sh', 'scripts/toolchain.sh', 'scripts/install-deps.sh', format('scripts/platforms/{0}.sh', matrix.platform)) }}" >> "$GITHUB_OUTPUT"
 
       # Same cache entries as the build-deps workflow, which can warm them ahead of time.
       - name: Restore third-party libraries
-        if: matrix.deps == 'true'
         uses: actions/cache/restore@v4
         with:
           path: .deps/prefix
-          key: deps-v2-${{ matrix.platform }}-${{ matrix.arch }}-${{ steps.dirs.outputs.toolchain }}-${{ github.run_id }}
-          restore-keys: deps-v2-${{ matrix.platform }}-${{ matrix.arch }}-${{ steps.dirs.outputs.toolchain }}-
+          key: deps-v3-${{ matrix.platform }}-${{ matrix.arch }}-${{ steps.dirs.outputs.toolchain }}-${{ github.run_id }}
+          restore-keys: deps-v3-${{ matrix.platform }}-${{ matrix.arch }}-${{ steps.dirs.outputs.toolchain }}-
 
       - name: Build third-party libraries
         id: deps
-        if: matrix.deps == 'true'
         shell: bash
         run: ./scripts/build-deps.sh
 
@@ -219,7 +210,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: .deps/prefix
-          key: deps-v2-${{ matrix.platform }}-${{ matrix.arch }}-${{ steps.dirs.outputs.toolchain }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: deps-v3-${{ matrix.platform }}-${{ matrix.arch }}-${{ steps.dirs.outputs.toolchain }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Restore ccache
         uses: actions/cache@v4
@@ -237,17 +228,23 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          # Universal slices get a separate prefix so the release job does not publish them.
-          name: ${{ matrix.universal_slice == 'true' && 'slice' || 'ffmpeg' }}-${{ matrix.platform }}-${{ matrix.arch }}-${{ needs.setup.outputs.release_tag }}
+          # Slices of a merged arch get a separate prefix so the release job does not publish them.
+          name: ${{ matrix.slice == 'true' && 'slice' || 'ffmpeg' }}-${{ matrix.platform }}-${{ matrix.arch }}-${{ needs.setup.outputs.release_tag }}
           path: dist/packages/*
           if-no-files-found: error
 
-  lipo:
+  merge:
+    name: merge ${{ matrix.platform }}/${{ matrix.arch }}
     needs: [setup, build]
-    if: needs.setup.outputs.needs_lipo == 'true'
+    if: needs.setup.outputs.needs_merge == 'true'
+    strategy:
+      matrix: ${{ fromJSON(needs.setup.outputs.merges) }}
     runs-on: macos-15
     timeout-minutes: 30
     env:
+      TARGET_PLATFORM: ${{ matrix.platform }}
+      TARGET_ARCH: ${{ matrix.arch }}
+      SLICES: ${{ matrix.slices }}
       PACKAGE_FORMAT: ${{ needs.setup.outputs.archive_format }}
       RELEASE_TAG: ${{ needs.setup.outputs.release_tag }}
       CONFIGURE_OPTIONS: ${{ needs.setup.outputs.configure_options }}
@@ -255,31 +252,34 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Download x86_64 artifact
+      - name: Download slices
         uses: actions/download-artifact@v4
         with:
-          name: slice-macos-x86_64-${{ needs.setup.outputs.release_tag }}
-          path: artifacts/x86_64
+          pattern: slice-${{ matrix.platform }}-*-${{ needs.setup.outputs.release_tag }}
+          path: slices
 
-      - name: Download arm64 artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: slice-macos-arm64-${{ needs.setup.outputs.release_tag }}
-          path: artifacts/arm64
-
-      - name: Merge into universal binary
+      # artifacts/<slice>/ for scripts/merge-slices.sh.
+      - name: Arrange slices
         shell: bash
-        run: ./scripts/lipo-universal.sh
+        run: |
+          for slice in $SLICES; do
+            mkdir -p "artifacts/$slice"
+            mv "slices/slice-$TARGET_PLATFORM-$slice-$RELEASE_TAG"/* "artifacts/$slice/"
+          done
 
-      - name: Upload universal artifact
+      - name: Merge with lipo
+        shell: bash
+        run: ./scripts/merge-slices.sh
+
+      - name: Upload merged artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ffmpeg-macos-universal-${{ needs.setup.outputs.release_tag }}
+          name: ffmpeg-${{ matrix.platform }}-${{ matrix.arch }}-${{ needs.setup.outputs.release_tag }}
           path: dist/packages/*
           if-no-files-found: error
 
   release:
-    needs: [setup, build, lipo]
+    needs: [setup, build, merge]
     # Publish whatever succeeded, even if some matrix entries failed.
     if: ${{ !cancelled() && needs.setup.result == 'success' }}
     runs-on: ubuntu-latest
@@ -307,12 +307,12 @@ jobs:
           path: release-assets
           merge-multiple: true
 
-      # NuGet: combine every platform archive (macOS universal slices included) into one .nupkg.
-      - name: Download platform archives for NuGet
+      # NuGet: combine the archive of every selected architecture into one .nupkg.
+      - name: Download architecture archives for NuGet
         if: needs.setup.outputs.package_format == 'nuget'
         uses: actions/download-artifact@v4
         with:
-          pattern: '*-${{ needs.setup.outputs.release_tag }}'
+          pattern: 'ffmpeg-*-${{ needs.setup.outputs.release_tag }}'
           path: nuget-input
           merge-multiple: true
 
@@ -328,6 +328,7 @@ jobs:
         env:
           PACKAGE_OWNER: ${{ github.repository_owner }}
           RUN_NUMBER: ${{ github.run_number }}
+          TARGET_PLATFORM: ${{ needs.setup.outputs.target_platform }}
         run: python3 -I scripts/pack-nuget.py nuget-input release-assets
 
       - name: Publish draft release

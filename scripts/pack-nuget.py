@@ -1,18 +1,19 @@
-"""Combine per-platform build archives into one NuGet package.
+"""Combine the build archives of one platform's architectures into one NuGet package.
 
 Usage: pack-nuget.py <archives-dir> <output-dir>
 
 Every ffmpeg-<platform>-<arch>-*.zip (or .tar.gz) archive in <archives-dir> becomes one
-runtime identifier (RID). The package contains, per RID:
+runtime identifier (RID, from docs/targets.json). The package contains, per RID:
   build/native/<rid>/       the complete install tree (headers, libraries, binaries,
                             pkg-config files, BUILDINFO.txt) as in the zip output
   runtimes/<rid>/native/    executables and shared libraries, copied to the output of
                             .NET projects automatically
 plus build/native/<id>.targets for C++ (vcxproj) projects on Windows.
 
-Environment: PACKAGE_OWNER, RUN_NUMBER, CONFIGURE_OPTIONS, SOURCE_REPOSITORY,
+Environment: PACKAGE_OWNER, RUN_NUMBER, CONFIGURE_OPTIONS, TARGET_PLATFORM, SOURCE_REPOSITORY,
 SOURCE_COMMIT (optional), RELEASE_TAG.
 """
+import json
 import os
 import re
 import shutil
@@ -22,20 +23,17 @@ import tempfile
 from pathlib import Path
 from xml.sax.saxutils import escape
 
+TARGETS = json.loads((Path(__file__).resolve().parent.parent / "docs" / "targets.json").read_text(encoding="utf-8"))
 RIDS = {
-    ("linux", "x86_64"): "linux-x64",
-    ("linux", "x86"): "linux-x86",
-    ("linux", "arm64"): "linux-arm64",
-    ("linux", "armv7"): "linux-arm",
-    ("macos", "x86_64"): "osx-x64",
-    ("macos", "arm64"): "osx-arm64",
-    ("windows", "x86_64"): "win-x64",
-    ("windows", "x86"): "win-x86",
-    ("windows", "arm64"): "win-arm64",
+    (platform, arch): spec["rid"]
+    for platform, platform_spec in TARGETS["platforms"].items()
+    for arch, spec in platform_spec["archs"].items()
+    if "rid" in spec
 }
 # MSBuild $(Platform) values of C++ projects for each Windows RID.
 MSBUILD_PLATFORMS = {"win-x64": ["x64"], "win-x86": ["Win32", "x86"], "win-arm64": ["ARM64"]}
-ARCHIVE_PATTERN = re.compile(r"^ffmpeg-(linux|macos|windows)-(x86_64|x86|arm64|armv7)-.+\.(zip|tar\.gz)$")
+# ffmpeg-<platform>-<arch>-<license>-<build id>; platform and arch ids contain no "-".
+ARCHIVE_PATTERN = re.compile(r"^ffmpeg-([^-]+)-([^-]+)-.+\.(zip|tar\.gz)$")
 
 
 def fail(message):
@@ -107,11 +105,10 @@ def license_label(configure):
 
 
 def platform_label(rids):
-    """The RID for a single-RID package, else the OS prefix (win / linux / osx) they share."""
+    """The RID for a single-RID package, else the platform's NuGet name (win / linux / osx ...)."""
     if len(rids) == 1:
         return rids[0]
-    systems = {rid.split("-")[0] for rid in rids}
-    return systems.pop() if len(systems) == 1 else ""
+    return TARGETS["platforms"].get(os.environ.get("TARGET_PLATFORM", ""), {}).get("nuget", "")
 
 
 def license_expression(configure):

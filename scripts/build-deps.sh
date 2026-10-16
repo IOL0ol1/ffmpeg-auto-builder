@@ -4,14 +4,15 @@
 # shared libraries.
 #
 # Environment:
-#   TARGET_PLATFORM  linux | macos | windows
-#   TARGET_ARCH      x86_64 | x86 | arm64
+#   TARGET_PLATFORM  a platform of docs/targets.json
+#   TARGET_ARCH      one of its architectures
 #   DEPS_PREFIX      install prefix for the libraries
 #   DEPS_WORK        scratch directory for sources and builds (default: $RUNNER_TEMP/deps-work)
-#   LLVM_MINGW       llvm-mingw toolchain root (windows only; see scripts/install-deps.sh)
+#   LLVM_MINGW       llvm-mingw toolchain root (windows only; see scripts/platforms/windows.sh)
 #
-# Each deps/NN-name.sh sets DEP_VERSION, DEP_URL, DEP_SHA256 and defines dep_build;
-# DEP_PLATFORMS (default: all) limits the targets it is built for.
+# Each deps/NN-name.sh sets DEP_VERSION, DEP_URL, DEP_SHA256 and defines dep_build. DEP_FEATURE
+# (default: the recipe name; empty: always built) is the library toggle of docs/configure.js
+# it belongs to; a target skips the recipes whose toggle docs/targets.json lists as unavailable.
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -84,6 +85,7 @@ meson_build() {
 # ── Build ────────────────────────────────────────────────────────────────────
 
 target_key="${TARGET_PLATFORM}/${TARGET_ARCH}"
+unavailable=" $(python3 -I "$script_dir/targets.py" unavailable "$TARGET_PLATFORM" "$TARGET_ARCH" | tr -d '\r') "
 built=()
 
 # Tell the workflow whether the prefix changed, also when a later library fails, so the
@@ -95,11 +97,14 @@ trap report_changes EXIT
 for dep in "$repo_root"/deps/[0-9]*.sh; do
   DEP_NAME="$(basename "$dep" .sh)"
   DEP_NAME="${DEP_NAME#*-}"
-  DEP_PLATFORMS="linux/x86_64 linux/arm64 linux/x86 linux/armv7 macos/x86_64 macos/arm64 windows/x86_64 windows/x86 windows/arm64"
+  DEP_FEATURE="$DEP_NAME"
   unset -f dep_build
   source "$dep"
 
-  [[ " $DEP_PLATFORMS " == *" $target_key "* ]] || { echo "Skipping $DEP_NAME on $target_key"; continue; }
+  if [[ -n "$DEP_FEATURE" && "$unavailable" == *" $DEP_FEATURE "* ]]; then
+    echo "Skipping $DEP_NAME: $DEP_FEATURE is not available on $target_key"
+    continue
+  fi
 
   # The stamp covers the recipe itself, so editing deps/<name>.sh rebuilds that library.
   stamp="$DEPS_PREFIX/.stamps/${DEP_NAME}-${DEP_VERSION}-$(sha256sum "$dep" | cut -c1-12)"
