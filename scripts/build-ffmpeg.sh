@@ -38,6 +38,12 @@ if [[ -n "${DEPS_PREFIX:-}" ]]; then
     wasm)    ;;
     *)       injected_args+=("--extra-libs=-lc++") ;;
   esac
+  case "$TARGET_PLATFORM/$TARGET_ARCH" in
+    # The 32-bit x86 assembly needs text relocations, which Android rejects.
+    android/x86) injected_args+=("--disable-asm") ;;
+    # The Core Image filters use NSOpenGL, which Mac Catalyst does not have.
+    maccatalyst/*) injected_args+=("--disable-coreimage") ;;
+  esac
   # On Intel Macs Homebrew lives in /usr/local, which the compiler searches by default, so
   # link-test autodetection would pick up its liblzma / libX11 and tie the binaries to it.
   if [[ "$TARGET_PLATFORM" == "macos" ]]; then
