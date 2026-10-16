@@ -57,6 +57,8 @@ EOF
   done
   export CC="$dir/clang" CXX="$dir/clang++"
   export AR=llvm-ar RANLIB=llvm-ranlib NM=llvm-nm STRIP=llvm-strip
+  # Meson installs pkg-config files for FreeBSD hosts into libdata/pkgconfig.
+  export PKG_CONFIG_LIBDIR="$PKG_CONFIG_LIBDIR:$DEPS_PREFIX/libdata/pkgconfig"
   TARGET_RUNNER="none"
   AUTOTOOLS_HOST_ARGS=(--host="$triple")
   write_cross_files FreeBSD "$cpu_family" "$cpu_family" "$CC" "$CXX" "$AR" "$STRIP" "" "$FREEBSD_SYSROOT"
