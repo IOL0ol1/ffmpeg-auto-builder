@@ -25,7 +25,7 @@ body:
     id: package_format
     attributes:
       label: パッケージ形式
-      description: "tar.gz / zip / nuget のいずれか"
+      description: "tar.gz / zip / nuget / aar / xcframework のいずれか"
       value: tar.gz
     validations:
       required: true
@@ -33,7 +33,7 @@ body:
     id: target_platform
     attributes:
       label: ターゲットプラットフォーム
-      description: "linux / macos / windows / android / ios / tvos / visionos / maccatalyst / freebsd / wasm のいずれか"
+      description: "linux / macos / windows / android / ios / tvos / visionos / maccatalyst / freebsd / wasm のいずれか。XCFramework では apple"
       value: linux
     validations:
       required: true
@@ -41,7 +41,7 @@ body:
     id: target_arch
     attributes:
       label: ターゲットアーキテクチャ
-      description: "プラットフォームのアーキテクチャ（例：x86_64 / x86 / arm64 / armv7 / universal）。NuGet ではカンマ区切りで複数指定できます（例：x86_64,arm64）"
+      description: "プラットフォームのアーキテクチャ（例：x86_64 / x86 / arm64 / armv7 / universal）。NuGet / AAR ではカンマ区切りで複数指定できます（例：x86_64,arm64）。XCFramework では <プラットフォーム>_<アーキテクチャ>（例：ios_arm64,ios_sim_arm64）"
       value: x86_64
     validations:
       required: true

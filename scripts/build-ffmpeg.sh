@@ -255,7 +255,7 @@ install_cmake_config
 case "$TARGET_PLATFORM" in
   linux | freebsd)     fix_linux_rpath ;;
   android)             fix_android_sonames ;;
-  macos | maccatalyst) fix_macos_install_names ;;
+  macos | maccatalyst | ios | tvos | visionos) fix_macos_install_names ;;
   windows)             bundle_windows_runtime; fix_windows_import_libs ;;
 esac
 

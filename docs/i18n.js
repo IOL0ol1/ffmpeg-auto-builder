@@ -32,6 +32,8 @@ const MESSAGES = {
     'form.package.nugetHint': '生成一个 NuGet 包，可用于 C++（vcxproj）和 C# 项目；在下方勾选的指令集都会放进同一个包中。只支持共享库。',
     'form.submit': '在 GitHub 上提交编译',
     'form.repoUnknown': '无法识别当前仓库，请检查 Pages 访问地址。',
+    'form.package.aarHint': '生成一个 Android AAR：jni/ 中是各 ABI 的共享库，prefab/ 让 NDK 项目可用 find_package(ffmpeg) 链接。只支持共享库，不包含 ffmpeg / ffprobe 程序。',
+    'form.package.xcframeworkHint': '每个库（FFmpeg 及第三方库）生成一个 XCFramework，可勾选多个 Apple 目标：静态链接为 .a，共享链接为 .framework。只包含库，不包含程序。',
     'form.arch.multi': '目标指令集（可多选）',
     'form.arch.lastOne': '至少需要保留一个指令集',
 
@@ -132,6 +134,9 @@ const MESSAGES = {
     'reason.targetLinkage': '该目标平台只支持静态库',
     'reason.targetPrograms': '该目标平台不能编译 ffmpeg / ffprobe 程序，只提供库',
     'reason.nugetPlatform': '该平台只支持静态库，不能打包为 NuGet（NuGet 包需要共享库）',
+    'reason.aarPlatform': 'AAR 只用于 Android',
+    'reason.aarShared': 'AAR 只包含共享库',
+    'reason.xcframeworkBoth': 'XCFramework 只能包含静态库或 framework 其中一种',
     'notice.linkedOn': '已同时开启 {labels}（{item} 依赖它）。',
     'notice.linkedOff': '已同时关闭 {labels}（依赖 {item}）。',
 
@@ -214,6 +219,8 @@ const MESSAGES = {
     'form.package.nugetHint': 'Creates one NuGet package for C++ (vcxproj) and C# projects; every architecture checked below goes into the same package. Shared libraries only.',
     'form.submit': 'Submit on GitHub',
     'form.repoUnknown': 'Cannot detect this repository; check the Pages URL.',
+    'form.package.aarHint': 'Creates one Android AAR: the shared libraries of every ABI in jni/, and prefab/ so NDK projects can link with find_package(ffmpeg). Shared libraries only, without the ffmpeg / ffprobe programs.',
+    'form.package.xcframeworkHint': 'One XCFramework per library (FFmpeg and third-party) for the Apple targets checked below: .a for static linking, .framework for shared. Libraries only, no programs.',
     'form.arch.multi': 'Target architectures (one or more)',
     'form.arch.lastOne': 'At least one architecture is required',
 
@@ -314,6 +321,9 @@ const MESSAGES = {
     'reason.targetLinkage': 'This target supports static libraries only',
     'reason.targetPrograms': 'The ffmpeg / ffprobe programs cannot be built for this target; libraries only',
     'reason.nugetPlatform': 'This platform supports static libraries only, so it cannot be packaged as NuGet (NuGet needs shared libraries)',
+    'reason.aarPlatform': 'AAR is for Android only',
+    'reason.aarShared': 'AAR packages contain shared libraries only',
+    'reason.xcframeworkBoth': 'An XCFramework holds either static libraries or frameworks, not both',
     'notice.linkedOn': 'Also enabled {labels} ({item} depends on it).',
     'notice.linkedOff': 'Also disabled {labels} (depends on {item}).',
 
@@ -396,6 +406,8 @@ const MESSAGES = {
     'form.package.nugetHint': 'C++（vcxproj）と C# プロジェクトで使える NuGet パッケージを 1 つ生成します。下でチェックしたアーキテクチャはすべて同じパッケージにまとめられます。共有ライブラリのみ対応しています。',
     'form.submit': 'GitHub で依頼する',
     'form.repoUnknown': 'リポジトリを判別できません。Pages の URL を確認してください。',
+    'form.package.aarHint': 'Android AAR を 1 つ生成します。jni/ に各 ABI の共有ライブラリ、prefab/ により NDK プロジェクトから find_package(ffmpeg) でリンクできます。共有ライブラリのみで、ffmpeg / ffprobe プログラムは含みません。',
+    'form.package.xcframeworkHint': 'ライブラリごと（FFmpeg とサードパーティ）に XCFramework を生成します。下で複数の Apple ターゲットを選べます。静的リンクは .a、共有は .framework です。ライブラリのみで、プログラムは含みません。',
     'form.arch.multi': 'ターゲットアーキテクチャ（複数選択可）',
     'form.arch.lastOne': '少なくとも 1 つのアーキテクチャが必要です',
 
@@ -496,6 +508,9 @@ const MESSAGES = {
     'reason.targetLinkage': 'このターゲットは静的ライブラリのみ対応しています',
     'reason.targetPrograms': 'このターゲットでは ffmpeg / ffprobe プログラムをビルドできません（ライブラリのみ）',
     'reason.nugetPlatform': 'このプラットフォームは静的ライブラリのみ対応のため NuGet パッケージにできません（NuGet は共有ライブラリが必要です）',
+    'reason.aarPlatform': 'AAR は Android 専用です',
+    'reason.aarShared': 'AAR には共有ライブラリのみ含まれます',
+    'reason.xcframeworkBoth': 'XCFramework には静的ライブラリか framework のどちらか一方のみ含められます',
     'notice.linkedOn': '{labels} も有効にしました（{item} が依存しています）。',
     'notice.linkedOff': '{labels} も無効にしました（{item} に依存しています）。',
 

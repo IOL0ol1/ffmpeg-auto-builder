@@ -4,8 +4,9 @@
     "(scripts/targets.py) and the NuGet packer. Platform and architecture ids contain no '-'.",
     "platform: label, nuget (NuGet id suffix for several RIDs), toolchain (scripts/platforms/",
     "  <toolchain>.sh, default: the platform id), tls (https protocol available),",
-    "  linkage (allowed linkage options, default all; NuGet needs 'shared'), programs (false:",
-    "  ffmpeg / ffprobe cannot be built).",
+    "  linkage (allowed linkage options of the archive formats, default all; NuGet / AAR need",
+    "  'shared'), programs (false: ffmpeg / ffprobe cannot be built), xcframework (true: can be",
+    "  part of an XCFramework, whose pseudo platform 'apple' takes '<platform>_<arch>' targets).",
     "arch: label, rid (NuGet runtime identifier), runner, container, unavailable (library",
     "  toggle ids of docs/configure.js that cannot be built), merge (built from these archs",
     "  and merged with lipo; not offered for NuGet)."
@@ -31,6 +32,7 @@
     },
     "macos": {
       "label": "macOS",
+      "xcframework": true,
       "nuget": "osx",
       "tls": true,
       "archs": {
@@ -62,6 +64,7 @@
     },
     "ios": {
       "label": "iOS",
+      "xcframework": true,
       "nuget": "ios",
       "toolchain": "apple",
       "tls": true,
@@ -76,6 +79,7 @@
     },
     "tvos": {
       "label": "tvOS",
+      "xcframework": true,
       "nuget": "tvos",
       "toolchain": "apple",
       "tls": true,
@@ -90,6 +94,7 @@
     },
     "visionos": {
       "label": "visionOS",
+      "xcframework": true,
       "nuget": "visionos",
       "toolchain": "apple",
       "tls": false,
@@ -102,6 +107,7 @@
     },
     "maccatalyst": {
       "label": "Mac Catalyst",
+      "xcframework": true,
       "nuget": "maccatalyst",
       "toolchain": "apple",
       "tls": false,

@@ -9,33 +9,61 @@ export const PLATFORMS = TARGETS.platforms;
 
 // ── Targets ──────────────────────────────────────────────────────────────────
 
-// context: { platform, archs, packageFormat } — the selected target and package format;
-// archs holds one architecture, or several for NuGet.
+// context: { platform, archs, packageFormat } — the selected target and package format.
+// archs holds one architecture, or several for the multi-target formats; the XCFramework
+// pseudo platform "apple" takes "<platform>_<arch>" targets of every Apple platform.
 
-// NuGet packages need shared libraries.
+// Formats that combine several architectures (or targets) into one package.
+export const MULTI_FORMATS = new Set(['nuget', 'aar', 'xcframework']);
+export const XCFRAMEWORK_PLATFORM = 'apple';
+const XCFRAMEWORK_PLATFORMS = Object.keys(PLATFORMS).filter((id) => PLATFORMS[id].xcframework);
+
+// Platforms offered for a package format, as [id, label].
+export function platformChoices(packageFormat) {
+  if (packageFormat === 'xcframework') {
+    return [[XCFRAMEWORK_PLATFORM, `Apple (${XCFRAMEWORK_PLATFORMS.map((id) => PLATFORMS[id].label).join(' / ')})`]];
+  }
+  return Object.entries(PLATFORMS).map(([id, spec]) => [id, spec.label]);
+}
+
+// NuGet and AAR packages need shared libraries; AAR is Android only.
 export function platformStatus(platform, packageFormat) {
   const linkage = PLATFORMS[platform]?.linkage;
+  if (packageFormat === 'aar' && platform !== 'android') return { available: false, reason: 'aarPlatform' };
   if (packageFormat === 'nuget' && linkage && !linkage.includes('shared')) return { available: false, reason: 'nugetPlatform' };
   return { available: true };
 }
 
-// Architectures offered for a platform. NuGet packs separate architectures, so merged ones
-// (macOS universal) are not offered there.
+// Architectures (or XCFramework targets) offered for a platform. Merged architectures
+// (universal) are not offered for the multi-target formats, which keep them separate.
 export function archChoices(platform, packageFormat) {
+  if (platform === XCFRAMEWORK_PLATFORM) {
+    return XCFRAMEWORK_PLATFORMS.flatMap((id) => Object.entries(PLATFORMS[id].archs)
+      .filter(([, spec]) => !spec.merge)
+      .map(([arch, spec]) => ({ id: `${id}_${arch}`, label: `${PLATFORMS[id].label} · ${spec.label}` })));
+  }
   return Object.entries(PLATFORMS[platform]?.archs || {})
-    .filter(([, spec]) => !(packageFormat === 'nuget' && spec.merge))
+    .filter(([, spec]) => !(MULTI_FORMATS.has(packageFormat) && spec.merge))
     .map(([id, spec]) => ({ id, label: spec.label }));
 }
 
-// Specs of the selected architectures; a merged architecture counts as its parts.
-function selectedArchSpecs(context) {
-  const archs = PLATFORMS[context.platform]?.archs || {};
-  return (context.archs || [])
-    .flatMap((id) => archs[id]?.merge || [id])
-    .map((id) => archs[id])
-    .filter(Boolean);
+// [{ platform, spec }] of the selected targets; a merged architecture counts as its parts.
+function selectedTargets(context) {
+  const pairs = context.platform === XCFRAMEWORK_PLATFORM
+    ? (context.archs || []).map((id) => [id.split('_')[0], id.slice(id.indexOf('_') + 1)])
+    : (context.archs || []).map((arch) => [context.platform, arch]);
+  return pairs.flatMap(([platform, arch]) => {
+    const archs = PLATFORMS[platform]?.archs || {};
+    return (archs[arch]?.merge || [arch]).filter((id) => archs[id]).map((id) => ({ platform, spec: archs[id] }));
+  });
 }
 
+// True when every selected target's platform passes the check (and there is one).
+function everyPlatform(context, check) {
+  const targets = selectedTargets(context);
+  const platforms = targets.length ? targets.map((target) => target.platform) : [context.platform];
+  return platforms.every((platform) => PLATFORMS[platform] && check(PLATFORMS[platform]));
+}
 
 // Mutually exclusive choices, rendered as segmented controls.
 export const SEGMENTS = [
@@ -53,9 +81,10 @@ export const SEGMENTS = [
     default: 'static',
     options: [
       // NuGet packages carry shared libraries only (P/Invoke and MSVC import libraries need them).
-      { id: 'static', flags: ['--enable-static', '--disable-shared'], excludedFormats: ['nuget'] },
+      { id: 'static', flags: ['--enable-static', '--disable-shared'], excludedFormats: { nuget: 'nugetShared', aar: 'aarShared' } },
       { id: 'shared', flags: ['--enable-shared', '--disable-static'] },
-      { id: 'both', flags: ['--enable-static', '--enable-shared'], excludedFormats: ['nuget'] },
+      // An XCFramework holds either static libraries or frameworks.
+      { id: 'both', flags: ['--enable-static', '--enable-shared'], excludedFormats: { nuget: 'nugetShared', aar: 'aarShared', xcframework: 'xcframeworkBoth' } },
     ],
   },
   {
@@ -249,11 +278,11 @@ export function normalizeConfig(raw) {
 
 export function segmentOptionStatus(context, segmentId, optionId) {
   const option = SEGMENTS.find((segment) => segment.id === segmentId).options.find((item) => item.id === optionId);
-  if (option?.excludedFormats?.includes(context.packageFormat)) {
-    return { available: false, reason: `${context.packageFormat}Shared` };
-  }
-  const linkage = PLATFORMS[context.platform]?.linkage;
-  if (segmentId === 'linkage' && linkage && !linkage.includes(optionId)) {
+  const excluded = option?.excludedFormats?.[context.packageFormat];
+  if (excluded) return { available: false, reason: excluded };
+  // Platforms limited to static libraries can still have shared ones as XCFramework frameworks.
+  if (segmentId === 'linkage' && context.packageFormat !== 'xcframework'
+    && !everyPlatform(context, (spec) => !spec.linkage || spec.linkage.includes(optionId))) {
     return { available: false, reason: 'targetLinkage' };
   }
   // Shared third-party libraries need a target that can load shared libraries.
@@ -284,7 +313,7 @@ export function componentStatus(config, context, groupId, name) {
   if (rule?.needs && !config.toggles[rule.needs]) {
     return { available: false, reason: 'needs', needs: rule.needs };
   }
-  if (rule?.tls && PLATFORMS[context.platform]?.tls === false) {
+  if (rule?.tls && !everyPlatform(context, (spec) => spec.tls !== false)) {
     return { available: false, reason: rule.reason };
   }
   return { available: true };
@@ -306,8 +335,8 @@ export function effectiveComponents(config, context, groupId) {
 // must be available on each of them.
 export function toggleStatus(config, context, id) {
   const item = toggleById(id);
-  if (item.program && PLATFORMS[context.platform]?.programs === false) return { available: false, reason: 'targetPrograms' };
-  if (selectedArchSpecs(context).some((spec) => spec.unavailable?.includes(id))) return { available: false, reason: 'target' };
+  if (item.program && !everyPlatform(context, (spec) => spec.programs !== false)) return { available: false, reason: 'targetPrograms' };
+  if (selectedTargets(context).some(({ spec }) => spec.unavailable?.includes(id))) return { available: false, reason: 'target' };
   if (item.gpl && config.license !== 'gpl') return { available: false, reason: 'gpl' };
   return { available: true };
 }

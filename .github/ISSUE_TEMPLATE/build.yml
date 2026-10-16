@@ -25,7 +25,7 @@ body:
     id: package_format
     attributes:
       label: Package format
-      description: "One of: tar.gz / zip / nuget"
+      description: "One of: tar.gz / zip / nuget / aar / xcframework"
       value: tar.gz
     validations:
       required: true
@@ -33,7 +33,7 @@ body:
     id: target_platform
     attributes:
       label: Target platform
-      description: "One of: linux / macos / windows / android / ios / tvos / visionos / maccatalyst / freebsd / wasm"
+      description: "One of: linux / macos / windows / android / ios / tvos / visionos / maccatalyst / freebsd / wasm; apple for XCFramework"
       value: linux
     validations:
       required: true
@@ -41,7 +41,7 @@ body:
     id: target_arch
     attributes:
       label: Target architecture
-      description: "An architecture of the platform (e.g. x86_64 / x86 / arm64 / armv7 / universal); for NuGet several, comma-separated (e.g. x86_64,arm64)"
+      description: "An architecture of the platform (e.g. x86_64 / x86 / arm64 / armv7 / universal); for NuGet / AAR several, comma-separated (e.g. x86_64,arm64); for XCFramework <platform>_<arch> targets (e.g. ios_arm64,ios_sim_arm64)"
       value: x86_64
     validations:
       required: true

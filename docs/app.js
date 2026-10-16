@@ -1,7 +1,7 @@
 import {
-  COMPONENT_GROUPS, PLATFORMS, SEGMENTS, TOGGLE_GROUPS,
+  COMPONENT_GROUPS, MULTI_FORMATS, SEGMENTS, TOGGLE_GROUPS,
   archChoices, buildConfigure, componentStatus, defaultConfig, effectiveComponents, effectiveSegmentValue, effectiveToggle,
-  normalizeConfig, platformStatus, requiresGpl, sanitizeCustom, segmentOptionStatus, setToggle, toggleStatus,
+  normalizeConfig, platformChoices, platformStatus, requiresGpl, sanitizeCustom, segmentOptionStatus, setToggle, toggleStatus,
 } from './configure.js';
 import {
   LANGUAGES, detectLanguage, getLanguage, setLanguage, t, translateStatic,
@@ -160,11 +160,11 @@ function renderRepositoryInfo() {
 // Keeps the current platform when the package format still allows it.
 function updatePlatformOptions() {
   const current = targetPlatformSelect.value;
-  const options = Object.entries(PLATFORMS).map(([id, spec]) => {
+  const options = platformChoices(packageFormatSelect.value).map(([id, label]) => {
     const status = platformStatus(id, packageFormatSelect.value);
     const opt = document.createElement('option');
     opt.value = id;
-    opt.textContent = spec.label;
+    opt.textContent = label;
     opt.disabled = !status.available;
     opt.title = status.available ? '' : t(`reason.${status.reason}`);
     return opt;
@@ -174,14 +174,15 @@ function updatePlatformOptions() {
   if (keep) targetPlatformSelect.value = keep.value;
 }
 
-// NuGet architectures picked per platform, kept while switching platforms or formats.
+// Architectures picked per platform for the multi-target formats (NuGet, AAR, XCFramework),
+// kept while switching platforms or formats.
 const nugetArchs = {};
 
-// One architecture from a select, or (NuGet) several from checkboxes. Keeps the current
-// architecture when the new platform / format still offers it.
+// One architecture from a select, or several from checkboxes for NuGet / AAR / XCFramework.
+// Keeps the current architecture when the new platform / format still offers it.
 function updateArchOptions() {
   const platform = targetPlatformSelect.value;
-  const nuget = packageFormatSelect.value === 'nuget';
+  const nuget = MULTI_FORMATS.has(packageFormatSelect.value);
   const choices = archChoices(platform, packageFormatSelect.value);
   const current = targetArchSelect.value;
   targetArchField.hidden = nuget;
@@ -199,6 +200,7 @@ function updateArchOptions() {
 
   const ids = choices.map((choice) => choice.id);
   const picked = (nugetArchs[platform] || [current]).filter((id) => ids.includes(id));
+  if (!picked.length && platform === 'apple') picked.push(...ids.filter((id) => id.startsWith('ios_')));
   nugetArchs[platform] = picked.length ? picked : ids.slice(0, 1);
   targetArchList.replaceChildren(...choices.map(({ id, label }) => {
     const chip = makeChip(label, (checked) => {
@@ -227,9 +229,9 @@ function syncArchChips() {
 
 // The selected architectures in targets.json order.
 function selectedArchs() {
-  if (packageFormatSelect.value !== 'nuget') return [targetArchSelect.value];
+  if (!MULTI_FORMATS.has(packageFormatSelect.value)) return [targetArchSelect.value];
   const picked = nugetArchs[targetPlatformSelect.value] || [];
-  return archChoices(targetPlatformSelect.value, 'nuget').map((choice) => choice.id).filter((id) => picked.includes(id));
+  return archChoices(targetPlatformSelect.value, packageFormatSelect.value).map((choice) => choice.id).filter((id) => picked.includes(id));
 }
 
 // ── configure option builder ────────────────────────────────────────────────
@@ -446,7 +448,7 @@ function syncConfigUI() {
     });
     segmentsNode.querySelector(`[data-hint-for="${segment.id}"]`).textContent = t(`option.${segment.id}.${value}.hint`);
   });
-  packageHintNode.textContent = context.packageFormat === 'nuget' ? t('form.package.nugetHint') : '';
+  packageHintNode.textContent = MULTI_FORMATS.has(context.packageFormat) ? t(`form.package.${context.packageFormat}Hint`) : '';
 
   const toggleItems = TOGGLE_GROUPS.flatMap((group) => group.items);
   toggleGroupsNode.querySelectorAll('[data-toggle]').forEach((chip) => {
@@ -817,9 +819,9 @@ targetPlatformSelect.addEventListener('change', () => {
   syncConfigUI(); // platform-specific components (e.g. https) may change availability
 });
 packageFormatSelect.addEventListener('change', () => {
-  updatePlatformOptions(); // NuGet needs shared libraries, which some platforms lack
-  updateArchOptions(); // NuGet picks several architectures, without merged ones
-  syncConfigUI(); // NuGet allows shared linking only
+  updatePlatformOptions(); // NuGet / AAR need shared libraries, XCFramework has its own platform
+  updateArchOptions(); // the multi-target formats pick several architectures, without merged ones
+  syncConfigUI(); // NuGet / AAR allow shared linking only, XCFramework not both
 });
 targetArchSelect.addEventListener('change', syncConfigUI); // third-party libraries depend on the target
 

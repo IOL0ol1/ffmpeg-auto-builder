@@ -25,7 +25,7 @@ body:
     id: package_format
     attributes:
       label: 打包格式
-      description: "可选值：tar.gz / zip / nuget"
+      description: "可选值：tar.gz / zip / nuget / aar / xcframework"
       value: tar.gz
     validations:
       required: true
@@ -33,7 +33,7 @@ body:
     id: target_platform
     attributes:
       label: 目标平台
-      description: "可选值：linux / macos / windows / android / ios / tvos / visionos / maccatalyst / freebsd / wasm"
+      description: "可选值：linux / macos / windows / android / ios / tvos / visionos / maccatalyst / freebsd / wasm；XCFramework 填 apple"
       value: linux
     validations:
       required: true
@@ -41,7 +41,7 @@ body:
     id: target_arch
     attributes:
       label: 目标指令集
-      description: "该平台的指令集（如 x86_64 / x86 / arm64 / armv7 / universal）；NuGet 可用逗号分隔填写多个（如 x86_64,arm64）"
+      description: "该平台的指令集（如 x86_64 / x86 / arm64 / armv7 / universal）；NuGet / AAR 可用逗号分隔填写多个（如 x86_64,arm64）；XCFramework 填 <平台>_<指令集>（如 ios_arm64,ios_sim_arm64）"
       value: x86_64
     validations:
       required: true

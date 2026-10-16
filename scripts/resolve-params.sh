@@ -17,7 +17,9 @@ msg() {
     ja/nugetPlatform)  printf '%s は静的ライブラリのみ対応のため NuGet パッケージにできません（NuGet は共有ライブラリが必要です）' "$arg" ;;
     ja/depsLinkage)    printf 'サードパーティライブラリのリンクが不正です：%s（static / shared のいずれか）' "$arg" ;;
     ja/depsShared)     printf '%s は共有ライブラリに対応していないため、サードパーティライブラリは static のみです' "$arg" ;;
-    ja/format)         printf 'パッケージ形式が不正です：%s（tar.gz / zip / nuget のいずれか）' "$arg" ;;
+    ja/format)         printf 'パッケージ形式が不正です：%s（tar.gz / zip / nuget / aar / xcframework のいずれか）' "$arg" ;;
+    ja/aarPlatform)    printf 'AAR は Android 専用です（プラットフォーム：%s）' "$arg" ;;
+    ja/xcframeworkPlatform) printf 'XCFramework にはプラットフォーム apple とターゲット（例：ios_arm64,ios_sim_arm64）を指定します（プラットフォーム：%s）' "$arg" ;;
     ja/repo)           printf 'GitHub リポジトリのみ対応しています：%s' "$arg" ;;
     ja/ref)            printf 'ブランチ / タグ / コミットが不正です：%s' "$arg" ;;
     ja/token)          printf 'configure フラグに使用できない文字が含まれています：%s' "$arg" ;;
@@ -28,7 +30,9 @@ msg() {
     zh-CN/nugetPlatform) printf '%s 只支持静态库，不能打包为 NuGet（NuGet 包需要共享库）' "$arg" ;;
     zh-CN/depsLinkage) printf '第三方库链接方式无效：%s（可选 static / shared）' "$arg" ;;
     zh-CN/depsShared)  printf '%s 不支持共享库，第三方库只能选 static' "$arg" ;;
-    zh-CN/format)      printf '打包格式无效：%s（可选 tar.gz / zip / nuget）' "$arg" ;;
+    zh-CN/format)      printf '打包格式无效：%s（可选 tar.gz / zip / nuget / aar / xcframework）' "$arg" ;;
+    zh-CN/aarPlatform) printf 'AAR 只用于 Android（当前平台：%s）' "$arg" ;;
+    zh-CN/xcframeworkPlatform) printf 'XCFramework 需要平台 apple 和目标列表（如 ios_arm64,ios_sim_arm64）（当前平台：%s）' "$arg" ;;
     zh-CN/repo)        printf '源码仓库只支持 GitHub 地址：%s' "$arg" ;;
     zh-CN/ref)         printf '源码分支 / tag / commit 无效：%s' "$arg" ;;
     zh-CN/token)       printf 'configure 参数含有不允许的字符：%s' "$arg" ;;
@@ -39,7 +43,9 @@ msg() {
     */nugetPlatform)   printf '%s only supports static libraries, so it cannot be packaged as NuGet (NuGet needs shared libraries)' "$arg" ;;
     */depsLinkage)     printf 'Invalid third-party library linking: %s (static or shared)' "$arg" ;;
     */depsShared)      printf '%s does not support shared libraries; the third-party libraries can only be static' "$arg" ;;
-    */format)          printf 'Invalid package format: %s (one of tar.gz / zip / nuget)' "$arg" ;;
+    */format)          printf 'Invalid package format: %s (one of tar.gz / zip / nuget / aar / xcframework)' "$arg" ;;
+    */aarPlatform)     printf 'AAR is for Android only (platform: %s)' "$arg" ;;
+    */xcframeworkPlatform) printf 'XCFramework takes the platform apple and a list of targets such as ios_arm64,ios_sim_arm64 (platform: %s)' "$arg" ;;
     */repo)            printf 'Only GitHub repositories are supported: %s' "$arg" ;;
     */ref)             printf 'Invalid branch / tag / commit: %s' "$arg" ;;
     */token)           printf 'configure flags contain characters that are not allowed: %s' "$arg" ;;
@@ -71,7 +77,7 @@ fi
 # ── Validate ─────────────────────────────────────────────────────────────────
 
 case "$package_format" in
-  tar.gz | zip | nuget) ;;
+  tar.gz | zip | nuget | aar | xcframework) ;;
   *) fail "$(msg format "$package_format")" ;;
 esac
 
@@ -102,13 +108,16 @@ done
 sanitize_configure_options "$configure_options"
 configure_options="${SANITIZED_CONFIGURE_ARGS[*]}"
 
-# NuGet packages carry shared libraries only; appended last so they win over earlier flags.
-# The platform builds are archived as zip and combined into one .nupkg by the release job.
+# NuGet and AAR packages carry shared libraries only; appended last so they win over earlier
+# flags. The builds of these formats are archived as zip and combined by the release job.
 archive_format="$package_format"
-if [[ "$package_format" == "nuget" ]]; then
-  configure_options+=" --enable-shared --disable-static"
-  archive_format="zip"
-fi
+case "$package_format" in
+  nuget | aar)
+    configure_options+=" --enable-shared --disable-static"
+    archive_format="zip"
+    ;;
+  xcframework) archive_format="zip" ;;
+esac
 
 # ffmpeg-<platform>-<archs joined by ".">-<build id>
 release_tag="ffmpeg-${target_platform}-${resolved_archs}-$(date -u +%Y%m%dt%H%M%S)-${tag_suffix}"
@@ -119,7 +128,7 @@ validate_release_tag "$release_tag"
   echo "source_slug=${source_slug}"
   echo "source_ref=${source_ref}"
   echo "target_platform=${target_platform}"
-  echo "target_arch=${resolved_archs//./,}"
+  echo "target_arch=${resolved_targets}"
   echo "package_format=${package_format}"
   echo "archive_format=${archive_format}"
   echo "deps_linkage=${deps_linkage}"
@@ -130,4 +139,4 @@ validate_release_tag "$release_tag"
   echo "needs_merge=${resolved_needs_merge}"
 } >>"$GITHUB_OUTPUT"
 
-printf 'Resolved %s/%s from %s → %s\n' "$target_platform" "${resolved_archs//./,}" "$source_slug" "$release_tag"
+printf 'Resolved %s/%s from %s → %s\n' "$target_platform" "$resolved_targets" "$source_slug" "$release_tag"
