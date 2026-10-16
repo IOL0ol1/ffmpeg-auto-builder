@@ -4,6 +4,8 @@ English | [简体中文](README.zh-CN.md)
 
 A template repository for building FFmpeg online with **GitHub Pages + GitHub Issues + GitHub Actions**. Fork it, enable Actions, Issues and Pages, and you get a visual FFmpeg build tool that runs entirely on GitHub — no third-party backend, and **no token is ever entered on the web page**.
 
+**[Open the web page →](../../deployments/github-pages)** (in any fork this opens that fork's own Pages deployment; click **View deployment** there, or use **Deployments** in the sidebar.)
+
 ## Features
 
 - Fill in the source repository, branch/tag/commit, package format, target platform, architecture and configure options on the web page, and it generates a prefilled build issue.
@@ -55,7 +57,7 @@ A template repository for building FFmpeg online with **GitHub Pages + GitHub Is
 4. **Enable Pages**: open **Settings → Pages** and under **Build and deployment** choose:
    - **Source**: `Deploy from a branch`
    - **Branch**: the default branch, **Folder**: `/docs`
-5. After a minute or two the Pages URL appears at the top, e.g. `https://<your-user>.github.io/<repo>/`. Leave **Custom domain** empty.
+5. After a minute or two the Pages URL appears at the top, e.g. `https://<your-user>.github.io/<repo>/`. Leave **Custom domain** empty. Later you can also reach it from **Deployments → github-pages** in the repository sidebar or the "Open the web page" link at the top of this README; checking **Use your GitHub Pages website** under the gear icon next to **About** shows the URL on the repository home page.
 
 ### Step 2 (optional): Access token for private source repositories
 

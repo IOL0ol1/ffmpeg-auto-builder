@@ -4,6 +4,8 @@
 
 基于 **GitHub Pages + GitHub Issues + GitHub Actions** 的 FFmpeg 在线自动编译模板仓库。任何人 Fork 后，只需开启 Actions、Issues 和 Pages，即可获得一套纯 GitHub 生态、无需第三方后端、**网页上无需输入任何令牌**的可视化编译工具。
 
+**[打开网页 →](../../deployments/github-pages)**（在任何 Fork 中都会打开该 Fork 自己的 Pages 部署记录，点击其中的 **View deployment** 即可；也可以使用侧栏的 **Deployments**。）
+
 ## 功能概览
 
 - 网页填写源码仓库、分支/tag/commit、打包格式、目标平台、指令集和 configure 参数，一键生成预填好的编译 Issue。
@@ -55,7 +57,7 @@
 4. **开启 Pages**：打开 **Settings → Pages**，在 **Build and deployment** 中选择：
    - **Source**：`Deploy from a branch`
    - **Branch**：默认分支，**Folder**：`/docs`
-5. 保存后等待 1～2 分钟，页面顶部会显示 Pages 地址，形如 `https://<你的用户名>.github.io/<仓库名>/`。Custom domain 保持留空即可。
+5. 保存后等待 1～2 分钟，页面顶部会显示 Pages 地址，形如 `https://<你的用户名>.github.io/<仓库名>/`。Custom domain 保持留空即可。之后也可以从仓库侧栏的 **Deployments → github-pages** 或本 README 顶部的“打开网页”链接进入；在首页 **About** 旁的齿轮中勾选 **Use your GitHub Pages website**，仓库首页就会直接显示该地址。
 
 ### 第 2 步（可选）：配置私有源码仓库的访问令牌
 
