@@ -7,11 +7,20 @@ dep_build() {
   fetch_source
   # x264 has no assembly for these, needs ARMv6T2 + NEON on 32-bit ARM, and would build MIPS
   # MSA code without a run-time check.
+  # On 32-bit x86 Android (always PIC) the inline assembly runs out of registers.
   local asm=()
   case "$TARGET_PLATFORM/$TARGET_ARCH" in
-    linux/armel | linux/s390x | linux/riscv64 | linux/mips64el | linux/mipsel) asm=(--disable-asm) ;;
+    linux/armel | linux/s390x | linux/riscv64 | linux/mips64el | linux/mipsel | android/x86) asm=(--disable-asm) ;;
   esac
-  ./configure --prefix="$DEPS_PREFIX" ${AUTOTOOLS_HOST_ARGS[@]+"${AUTOTOOLS_HOST_ARGS[@]}"} \
+  # x264's config.sub predates riscv64, loongarch64 and Emscripten.
+  case "$TARGET_PLATFORM/$TARGET_ARCH" in
+    linux/x86_64 | linux/arm64) ;;
+    linux/* | wasm/*) update_config_scripts ;;
+  esac
+  # x264 does not know Emscripten; a generic 32-bit host without threads builds portable C.
+  local host=(${AUTOTOOLS_HOST_ARGS[@]+"${AUTOTOOLS_HOST_ARGS[@]}"})
+  [[ "$TARGET_PLATFORM" != wasm ]] || { host=(--host=i686-gnu); asm=(--disable-asm --disable-thread); }
+  ./configure --prefix="$DEPS_PREFIX" ${host[@]+"${host[@]}"} \
     --enable-static --enable-pic --disable-cli ${asm[@]+"${asm[@]}"} \
     --disable-lavf --disable-swscale --disable-ffms --disable-gpac --disable-lsmash
   make -j"$(cpu_count)"

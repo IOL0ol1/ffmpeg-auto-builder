@@ -33,6 +33,9 @@ if [[ -n "${DEPS_PREFIX:-}" ]]; then
     linux)   injected_args+=("--extra-libs=-lstdc++" "--extra-libs=-lm" "--extra-libs=-lpthread") ;;
     # The NDK's static libc++; bionic has no separate libpthread.
     android) injected_args+=("--extra-libs=-lc++_static" "--extra-libs=-lc++abi" "--extra-libs=-lm") ;;
+    freebsd) injected_args+=("--extra-libs=-lc++" "--extra-libs=-lm" "--extra-libs=-lpthread") ;;
+    # em++ links the C++ runtime (see scripts/platforms/wasm.sh).
+    wasm)    ;;
     *)       injected_args+=("--extra-libs=-lc++") ;;
   esac
   # On Intel Macs Homebrew lives in /usr/local, which the compiler searches by default, so
@@ -172,9 +175,9 @@ fix_windows_import_libs() {
 
 fix_pkgconfig
 case "$TARGET_PLATFORM" in
-  linux)   fix_linux_rpath ;;
-  macos)   fix_macos_install_names ;;
-  windows) bundle_windows_runtime; fix_windows_import_libs ;;
+  linux | freebsd)     fix_linux_rpath ;;
+  macos | maccatalyst) fix_macos_install_names ;;
+  windows)             bundle_windows_runtime; fix_windows_import_libs ;;
 esac
 
 # ── Smoke test (wherever the build host can run the result) ─────────────────

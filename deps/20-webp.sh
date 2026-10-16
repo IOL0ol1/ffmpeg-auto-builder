@@ -11,8 +11,11 @@ dep_build() {
     sed -i.bak -e 's/"AVX2;SSE41/"SSE41/' -e 's/"_avx2\.c;_sse41/"_sse41/' \
       -e 's/"-mavx2;-msse4\.1/"-msse4.1/' -e 's/"-mno-avx2;-mno-sse4\.1/"-mno-sse4.1/' cmake/cpu.cmake
   fi
+  # WebAssembly runs single-threaded (see scripts/platforms/wasm.sh).
+  local threads=()
+  [[ "$TARGET_PLATFORM" != wasm ]] || threads=(-DWEBP_USE_THREAD=OFF)
   cmake_build -DWEBP_BUILD_ANIM_UTILS=OFF -DWEBP_BUILD_CWEBP=OFF -DWEBP_BUILD_DWEBP=OFF \
     -DWEBP_BUILD_GIF2WEBP=OFF -DWEBP_BUILD_IMG2WEBP=OFF -DWEBP_BUILD_VWEBP=OFF \
     -DWEBP_BUILD_WEBPINFO=OFF -DWEBP_BUILD_WEBPMUX=OFF -DWEBP_BUILD_EXTRAS=OFF \
-    -DWEBP_BUILD_LIBWEBPMUX=ON
+    -DWEBP_BUILD_LIBWEBPMUX=ON ${threads[@]+"${threads[@]}"}
 }

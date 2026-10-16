@@ -17,7 +17,10 @@ dep_build() {
       -e 's|@sharedlibdir@|${libdir}|' -e 's|@includedir@|${prefix}/include|' -e "s|@VERSION@|$DEP_VERSION|" \
       zlib.pc.in >"$DEPS_PREFIX/lib/pkgconfig/zlib.pc"
   else
-    ./configure --prefix="$DEPS_PREFIX" --static
+    # The s390x vector CRC does not build with the Ubuntu 20.04 compiler.
+    local vx=()
+    [[ "$TARGET_ARCH" != s390x ]] || vx=(--disable-crcvx)
+    ./configure --prefix="$DEPS_PREFIX" --static ${vx[@]+"${vx[@]}"}
     make -j"$(cpu_count)"
     make install
   fi

@@ -17,6 +17,13 @@ dep_build() {
     # Portable C elsewhere (armel has no NEON; the others need newer compiler extensions).
     linux/x86_64 | linux/arm64) ;;
     linux/*)                 cpu=(-DAOM_TARGET_CPU=generic) ;;
+    freebsd/x86_64)          cpu=(-DAOM_TARGET_CPU=x86_64) ;;
+    # libaom's arm64 run-time CPU detection does not know FreeBSD; NEON is always there.
+    freebsd/arm64)           cpu=(-DAOM_TARGET_CPU=arm64 -DCONFIG_RUNTIME_CPU_DETECT=0) ;;
+    ios/*x86_64 | tvos/*x86_64 | maccatalyst/x86_64) cpu=(-DAOM_TARGET_CPU=x86_64) ;;
+    ios/* | tvos/* | visionos/* | maccatalyst/*)    cpu=(-DAOM_TARGET_CPU=arm64) ;;
+    # WebAssembly runs single-threaded (see scripts/platforms/wasm.sh).
+    wasm/*)                  cpu=(-DAOM_TARGET_CPU=generic -DCONFIG_MULTITHREAD=0 -DCONFIG_RUNTIME_CPU_DETECT=0) ;;
   esac
   cmake_build -DENABLE_DOCS=0 -DENABLE_EXAMPLES=0 -DENABLE_TESTS=0 -DENABLE_TOOLS=0 \
     ${cpu[@]+"${cpu[@]}"}

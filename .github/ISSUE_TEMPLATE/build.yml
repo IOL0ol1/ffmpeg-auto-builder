@@ -33,7 +33,7 @@ body:
     id: target_platform
     attributes:
       label: Target platform
-      description: "One of: linux / macos / windows"
+      description: "One of: linux / macos / windows / android / ios / tvos / visionos / maccatalyst / freebsd / wasm"
       value: linux
     validations:
       required: true

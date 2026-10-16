@@ -59,6 +59,76 @@
         "x86_64": { "label": "x86_64", "rid": "android-x64", "runner": "ubuntu-latest" },
         "x86": { "label": "x86", "rid": "android-x86", "runner": "ubuntu-latest", "unavailable": ["svtav1"] }
       }
+    },
+    "ios": {
+      "label": "iOS",
+      "nuget": "ios",
+      "toolchain": "apple",
+      "tls": true,
+      "linkage": ["static"],
+      "programs": false,
+      "archs": {
+        "arm64": { "label": "arm64 (device)", "rid": "ios-arm64", "runner": "macos-15" },
+        "sim_arm64": { "label": "arm64 (Simulator)", "rid": "iossimulator-arm64", "runner": "macos-15" },
+        "sim_x86_64": { "label": "x86_64 (Simulator)", "rid": "iossimulator-x64", "runner": "macos-15" },
+        "sim_universal": { "label": "Universal Simulator (arm64 + x86_64)", "merge": ["sim_arm64", "sim_x86_64"] }
+      }
+    },
+    "tvos": {
+      "label": "tvOS",
+      "nuget": "tvos",
+      "toolchain": "apple",
+      "tls": true,
+      "linkage": ["static"],
+      "programs": false,
+      "archs": {
+        "arm64": { "label": "arm64 (device)", "rid": "tvos-arm64", "runner": "macos-15" },
+        "sim_arm64": { "label": "arm64 (Simulator)", "rid": "tvossimulator-arm64", "runner": "macos-15" },
+        "sim_x86_64": { "label": "x86_64 (Simulator)", "rid": "tvossimulator-x64", "runner": "macos-15" },
+        "sim_universal": { "label": "Universal Simulator (arm64 + x86_64)", "merge": ["sim_arm64", "sim_x86_64"] }
+      }
+    },
+    "visionos": {
+      "label": "visionOS",
+      "nuget": "visionos",
+      "toolchain": "apple",
+      "tls": true,
+      "linkage": ["static"],
+      "programs": false,
+      "archs": {
+        "arm64": { "label": "arm64 (device)", "rid": "visionos-arm64", "runner": "macos-15" },
+        "sim_arm64": { "label": "arm64 (Simulator)", "rid": "visionossimulator-arm64", "runner": "macos-15" }
+      }
+    },
+    "maccatalyst": {
+      "label": "Mac Catalyst",
+      "nuget": "maccatalyst",
+      "toolchain": "apple",
+      "tls": true,
+      "archs": {
+        "arm64": { "label": "arm64 (Apple Silicon)", "rid": "maccatalyst-arm64", "runner": "macos-15" },
+        "x86_64": { "label": "x86_64 (Intel)", "rid": "maccatalyst-x64", "runner": "macos-15" },
+        "universal": { "label": "Universal (fat binary)", "merge": ["arm64", "x86_64"] }
+      }
+    },
+    "freebsd": {
+      "label": "FreeBSD",
+      "nuget": "freebsd",
+      "tls": false,
+      "archs": {
+        "x86_64": { "label": "x86_64 (amd64)", "rid": "freebsd-x64", "runner": "ubuntu-latest" },
+        "arm64": { "label": "arm64 (aarch64)", "rid": "freebsd-arm64", "runner": "ubuntu-latest" }
+      }
+    },
+    "wasm": {
+      "label": "WebAssembly (Emscripten)",
+      "nuget": "browser",
+      "tls": false,
+      "linkage": ["static"],
+      "programs": false,
+      "archs": {
+        "wasm32": { "label": "wasm32", "rid": "browser-wasm", "runner": "ubuntu-latest", "unavailable": ["x265", "svtav1", "dav1d", "libass"] }
+      }
     }
   }
 }

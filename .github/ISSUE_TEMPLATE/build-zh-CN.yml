@@ -33,7 +33,7 @@ body:
     id: target_platform
     attributes:
       label: 目标平台
-      description: "可选值：linux / macos / windows"
+      description: "可选值：linux / macos / windows / android / ios / tvos / visionos / maccatalyst / freebsd / wasm"
       value: linux
     validations:
       required: true

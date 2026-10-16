@@ -23,7 +23,13 @@ dep_build() {
     android/armv7)  target=armv7-android-gcc ;;
     android/x86_64) target=x86_64-android-gcc ;;
     android/x86)    target=x86-android-gcc ;;
+    freebsd/x86_64) target=x86_64-linux-gcc ;;
+    # libvpx's iOS targets pick their own SDK and compiler; its arm64 run-time CPU
+    # detection only knows Linux, Android, Windows and macOS.
+    ios/* | tvos/* | visionos/* | maccatalyst/* | freebsd/* | wasm/*) target=generic-gnu ;;
   esac
+  local extra=()
+  [[ "$TARGET_PLATFORM" != wasm ]] || extra=(--disable-multithread)
   # Cross builds use ${CROSS}as / ar / ...; CC alone does not set them. x86 assembles with nasm.
   case "$TARGET_PLATFORM/$TARGET_ARCH" in
     linux/x86_64 | linux/arm64 | linux/x86) ;;
@@ -33,7 +39,7 @@ dep_build() {
   esac
   ./configure --prefix="$DEPS_PREFIX" --target="$target" \
     --enable-static --disable-shared --enable-pic --enable-vp9-highbitdepth \
-    --disable-examples --disable-tools --disable-docs --disable-unit-tests
+    --disable-examples --disable-tools --disable-docs --disable-unit-tests ${extra[@]+"${extra[@]}"}
   make -j"$(cpu_count)"
   make install
 }

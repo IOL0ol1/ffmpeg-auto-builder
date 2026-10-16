@@ -33,6 +33,12 @@ on:
           - macos
           - windows
           - android
+          - ios
+          - tvos
+          - visionos
+          - maccatalyst
+          - freebsd
+          - wasm
       target_arch:
         description: Target architecture (see docs/targets.json); for NuGet a comma-separated list, e.g. x86_64,arm64
         required: true
