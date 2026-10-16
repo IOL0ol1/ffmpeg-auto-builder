@@ -70,6 +70,8 @@ platform_toolchain() {
     echo "set(CMAKE_SYSTEM_NAME $cmake_system)"
     echo "set(CMAKE_OSX_SYSROOT $sdk_path)"
     echo "set(CMAKE_OSX_ARCHITECTURES $clang_arch)"
+    # Executables of iOS-like systems default to app bundles, which need an install destination.
+    echo "set(CMAKE_MACOSX_BUNDLE OFF)"
     [[ "$TARGET_PLATFORM" == maccatalyst ]] || echo "set(CMAKE_OSX_DEPLOYMENT_TARGET $min_version)"
   } >>"$dir/cross.cmake"
   FFMPEG_TOOLCHAIN_ARGS=(
