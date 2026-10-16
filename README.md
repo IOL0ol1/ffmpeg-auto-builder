@@ -17,7 +17,7 @@ A template repository for building FFmpeg online with **GitHub Pages + GitHub Is
 - Like the official prebuilt FFmpeg binaries, common **third-party libraries are built from source and linked statically** (x264, x265, libvpx, dav1d, SVT-AV1, libaom, Opus, LAME, Vorbis, WebP, zimg, SoX resampler, libass); each one can be toggled on the page.
 - Linux x86_64 / arm64 builds run on glibc 2.28+ (RHEL 8, Debian 10, Ubuntu 20.04 and newer), the other Linux architectures on glibc 2.31+ (loongarch64: 2.36+); Windows is cross-compiled with llvm-mingw into self-contained executables; macOS supports 11.0+. See "Platforms and architectures".
 - ccache for incremental builds, a smoke test, and a single draft release per build (with `SHA256SUMS.txt`).
-- Packages as `tar.gz`, `zip` or a **NuGet package** for C++ and C# projects; one NuGet package can contain any selection of the platform's architectures.
+- Packages as `tar.gz`, `zip`, a **NuGet package** for C++ and C# projects, an **AAR** with Prefab for Android or **XCFrameworks** for Apple platforms; the combined formats can contain several architectures (or Apple targets). Every package contains a CMake package config (`find_package(FFmpeg)`).
 - Packages work right after extraction: shared builds get fixed rpaths / install names, `.pc` files use relative paths, Windows executables need no extra DLLs, and every package contains `BUILDINFO.txt`.
 - The page lists recent builds, their status and a job/step log summary.
 - The page can be switched between **English / 简体中文 / 日本語** (defaults to the browser language); the generated issue and the workflow's replies use the same language.
@@ -84,7 +84,7 @@ Open the Pages URL from step 1. The top shows the detected repository and whethe
 |---|---|---|
 | FFmpeg Git repository | A GitHub repository, HTTPS or SSH form | `https://github.com/FFmpeg/FFmpeg` |
 | Branch / tag / commit | Optional; commits need the full 40-character SHA | `n7.1`, `release/7.1` |
-| Package format | `tar.gz`, `zip` or `NuGet (.nupkg)` (see "NuGet package") | `zip` |
+| Package format | `tar.gz`, `zip`, `NuGet (.nupkg)`, `AAR (Android)` or `XCFramework (Apple)` (see the sections below) | `zip` |
 | Target platform | `Linux` / `macOS` / `Windows` | `Linux` |
 | Target architecture | Depends on the platform and package format; see the table below | `x86_64` |
 | Build options | Visual controls for build type, linking, license, programs & libraries, features and components, plus optional custom flags; the final configure flags are shown live (see "configure options") | Release + static + GPL |
@@ -189,6 +189,36 @@ On Linux and macOS, `ffmpeg` / `ffprobe` from the package need `chmod +x` before
 
 **C++ (Visual C++, vcxproj)**: install the package (packages.config) and `build/native/<id>.targets` adds, for x64 / Win32 / ARM64, the include directory, the `__STDC_CONSTANT_MACROS` define required by FFmpeg headers, the import libraries (`avcodec.lib`, …) and copies the DLLs next to the executable. Set the `FFmpegRid` property to choose a RID manually. Other build systems can use `build/native/<rid>/include`, `lib` and `lib/pkgconfig` directly.
 
+## AAR package (Android)
+
+With **Package format = AAR**, check the Android ABIs to include; the release contains one `.aar` (`ffmpeg-android-<abis>-<license>-<build id>.aar`). AAR packages use shared linking, like NuGet.
+
+```text
+jni/<abi>/*.so                       FFmpeg's (and shared third-party) libraries, packed into the APK
+prefab/prefab.json                   Prefab package "ffmpeg"
+prefab/modules/<lib>/include/        headers of the library (libavcodec/...)
+prefab/modules/<lib>/libs/android.<abi>/   the library for linking
+AndroidManifest.xml, classes.jar     package io.github.<owner>.ffmpeg, minSdk 21
+```
+
+- **Java / Kotlin (JNI)**: add the AAR (`implementation(files("libs/ffmpeg-....aar"))`); the `.so` files end up in the APK and can be loaded with `System.loadLibrary("avcodec")` etc.
+- **NDK (C / C++)**: enable `android { buildFeatures { prefab = true } }`, then in CMake `find_package(ffmpeg REQUIRED CONFIG)` and `target_link_libraries(app ffmpeg::avformat)`; each module brings its own headers and the FFmpeg libraries it depends on.
+- The `ffmpeg` / `ffprobe` programs are not part of the AAR.
+
+## XCFramework (Apple)
+
+With **Package format = XCFramework**, the platform becomes **Apple** and the targets of macOS, iOS, tvOS, visionOS and Mac Catalyst (device and simulator) can be checked together. The release contains `ffmpeg-apple-xcframework-<license>-<build id>.zip` with one `<library>.xcframework` per FFmpeg library and per third-party library (`libavcodec.xcframework`, `libx264.xcframework`, …). Targets of the same platform variant are merged with lipo into one slice (e.g. the arm64 and x86_64 simulators).
+
+| Linking | Contents | Use |
+|---|---|---|
+| Static | `.a` slices; the FFmpeg ones with their headers (`libavcodec/avcodec.h`) | Link into the app; add all XCFrameworks you use, including the third-party ones |
+| Shared | `libavcodec.framework` etc. per slice (install name `@rpath/libavcodec.framework/libavcodec`, headers inside) | Embed & sign in the app; dynamic frameworks are accepted by the App Store, plain dylibs are not |
+
+- "Static + shared" is not available: an XCFramework holds one kind.
+- iOS / tvOS / visionOS, which only offer static libraries as archives, can use shared linking here (as frameworks).
+- Only libraries are packaged; the `ffmpeg` / `ffprobe` programs are left out.
+- Swift Package Manager: reference the XCFrameworks as `binaryTarget`s; CocoaPods: `vendored_frameworks`.
+
 ## Third-party libraries
 
 Following the approach of the official prebuilt binaries (for example BtbN's FFmpeg-Builds and evermeet.cx), the libraries below are built from source for every target and linked statically, so the packages do not depend on any of them at run time. Each library is a recipe in `deps/NN-name.sh` with a pinned version, download URL and SHA256.
@@ -211,6 +241,7 @@ Following the approach of the official prebuilt binaries (for example BtbN's FFm
 | zlib | 1.3.2 | zlib | (autodetected) | |
 
 - **Licensing**: x264 and x265 are GPL; they are only available with the GPL license selected, and the resulting binaries are then GPL. The other libraries are compatible with LGPL builds.
+- **Static or shared**: the **Third-party libraries** option (default static) builds them as static libraries linked into FFmpeg, or as shared libraries shipped in the package next to FFmpeg's (`.so` / `.dylib` / `.dll`, or frameworks in an XCFramework). Shared libraries can be replaced on their own, for LGPL compliance (LAME, FriBidi, SoX), security updates (e.g. libwebp) or to share one copy with the rest of an app. Shared needs a target that can load shared libraries (not WebAssembly; iOS / tvOS / visionOS only as XCFramework). zlib and zimg on Windows and libvpx outside Linux / FreeBSD / macOS stay static.
 - **Caching**: the first build of the libraries for a target takes 20–40 minutes; the result is stored in the Actions cache and later builds reuse it. Running **Actions → build-deps → Run workflow** once warms the cache for all targets. Changing a recipe rebuilds only that library.
 - **Adding a library**: add `deps/NN-name.sh` with `DEP_VERSION`, `DEP_URL`, `DEP_SHA256` and a `dep_build` function using the `autotools_build`, `cmake_build` or `meson_build` helpers from `scripts/build-deps.sh`, then add a toggle for its `--enable-lib...` flag in `docs/configure.js` and `docs/i18n.js`.
 
@@ -229,6 +260,7 @@ The page turns common configure switches into visual controls and builds the fla
 |---|---|---|
 | Build type | **Release** (default) / RelWithDebInfo / Debug | `--disable-debug` / `--disable-stripping` / `--enable-debug=3 --disable-optimizations --disable-stripping` |
 | Linking | **Static** (default) / Shared / Static + shared | `--enable-static --disable-shared` / `--enable-shared --disable-static` / both enabled |
+| Third-party libraries | **Static** (default) / Shared | not a configure flag; sent as the `deps_linkage` parameter |
 | License | LGPL / **GPL** (default) | no flag / `--enable-gpl` |
 | Programs & libraries | ffmpeg, ffprobe, libavdevice, libavfilter, libswscale, libswresample, docs | unchecking emits `--disable-<name>` (docs are off by default: `--disable-doc`) |
 | Features | Assembly optimizations, hardware acceleration, network protocols, system library auto-detection, size optimization, PIC | `--disable-asm`, `--disable-hwaccels`, `--disable-network`, `--disable-autodetect`, `--enable-small`, `--enable-pic` |
@@ -278,7 +310,7 @@ The page turns common configure switches into visual controls and builds the fla
 
 - **Linux cross-compiled architectures** need glibc 2.31+ (newer than the 2.28 of x86_64 / arm64; loongarch64 2.36+). They target the distribution baselines: armv7 is armhf (VFPv3-D16, NEON not assumed), armel is ARMv5TE soft-float, MIPS is MIPS32r2 / MIPS64r2 without DSP / MSA / Loongson extensions. Several libraries use portable C there (libaom, libvpx, zimg; x264 on armel / s390x / riscv64 / MIPS), so encoding is slower than on x86_64 / arm64.
 - **Smoke test**: Windows, Android, the Apple mobile targets, FreeBSD and WebAssembly are cross-compiled and cannot run on the build host, so `ffmpeg -version` is not run for them.
-- **Apple mobile / WebAssembly** packages contain static libraries only (FFmpeg's plus the third-party ones in `lib/`); link them into your app. There is no `.xcframework` packaging yet.
+- **Apple mobile / WebAssembly** archives contain static libraries only (FFmpeg's plus the third-party ones in `lib/`); for frameworks use the XCFramework format.
 - **x265** is built 8-bit only (no 10/12-bit multilib yet).
 - **TLS**: Linux, Android, visionOS, Mac Catalyst, FreeBSD and WebAssembly builds have no TLS library, so `https` is not available there; Windows uses Schannel and the Apple platforms the system TLS.
 - **libass on Linux** is built without fontconfig: subtitle fonts come from the subtitle file's attachments or the filter's `fontsdir`.

@@ -39,7 +39,8 @@ for archive in "$archives_dir"/ffmpeg-*.zip; do
   [[ "$arch" != sim_* ]] || variant="$platform-simulator"
   mkdir -p "$work/slices/$variant/$arch"
   unzip -q "$archive" -d "$work/slices/$variant/$arch"
-  [[ " ${groups[*]} " == *" $variant "* ]] || groups+=("$variant")
+  # ${groups[*]-}: macOS bash 3.2 treats an empty array as unset under set -u.
+  [[ " ${groups[*]-} " == *" $variant "* ]] || groups+=("$variant")
 done
 [[ "${#groups[@]}" -gt 0 ]] || fail "no Apple archives found in $archives_dir"
 

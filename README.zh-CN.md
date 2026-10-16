@@ -17,7 +17,7 @@
 - 参照官方预编译版本的做法，**从源码编译常用第三方库并静态链接**（x264、x265、libvpx、dav1d、SVT-AV1、libaom、Opus、LAME、Vorbis、WebP、zimg、SoX 重采样、libass），每个库都可以在网页上开关。
 - Linux x86_64 / arm64 产物兼容 glibc 2.28+（RHEL 8、Debian 10、Ubuntu 20.04 及更新版本），其余 Linux 指令集兼容 glibc 2.31+（loongarch64 为 2.36+）；Windows 用 llvm-mingw 交叉编译，生成不依赖额外 DLL 的可执行文件；macOS 支持 11.0+。详见“平台与指令集对照表”。
 - ccache 增量编译、冒烟测试、统一发布一个 Draft Release（附 `SHA256SUMS.txt`）。
-- 打包格式支持 `tar.gz`、`zip` 和可用于 C++ / C# 项目的 **NuGet 包**；一个 NuGet 包可以包含该平台任意勾选的多个指令集。
+- 打包格式支持 `tar.gz`、`zip`、可用于 C++ / C# 项目的 **NuGet 包**、带 Prefab 的 Android **AAR**，以及 Apple 平台的 **XCFramework**；合并类格式可以包含多个指令集（或 Apple 目标）。每个产物都带 CMake 包配置（`find_package(FFmpeg)`）。
 - 产物可直接解压使用：共享库构建自动修正 rpath / install name，`.pc` 文件改为相对路径，Windows 可执行文件不依赖额外 DLL，包内附 `BUILDINFO.txt`。
 - 网页展示最近的编译记录、运行状态和 Job/Step 日志摘要。
 - 网页支持 **English / 简体中文 / 日本語** 切换（默认跟随浏览器语言），生成的 Issue 以及工作流在 Issue 中的回复都会使用同一语言。
@@ -84,7 +84,7 @@
 |---|---|---|
 | FFmpeg Git 仓库地址 | GitHub 仓库，HTTPS 或 SSH 写法均可 | `https://github.com/FFmpeg/FFmpeg` |
 | 源码分支 / tag / commit | 可选；commit 需填完整 40 位 SHA | `n7.1`、`release/7.1` |
-| 打包格式 | `tar.gz`、`zip` 或 `NuGet (.nupkg)`（见“NuGet 包”） | `zip` |
+| 打包格式 | `tar.gz`、`zip`、`NuGet (.nupkg)`、`AAR (Android)` 或 `XCFramework (Apple)`（见下方各节） | `zip` |
 | 目标平台 | `Linux` / `macOS` / `Windows` | `Linux` |
 | 目标指令集 | 选项随平台和打包格式变化，见下方对照表 | `x86_64` |
 | 编译参数 | 用可视化控件选择构建类型、链接方式、许可证、程序与库、功能特性和组件，必要时补充自定义参数；下方实时显示最终 configure 参数（详见“configure 参数说明”） | Release + 静态 + GPL |
@@ -189,6 +189,36 @@ static extern IntPtr av_version_info();
 
 **C++（Visual C++，vcxproj）**：安装此包（packages.config）后，`build/native/<id>.targets` 会为 x64 / Win32 / ARM64 自动添加头文件目录、FFmpeg 头文件所需的 `__STDC_CONSTANT_MACROS` 宏、导入库（`avcodec.lib` 等），并把 DLL 复制到可执行文件旁边；可通过 `FFmpegRid` 属性手动指定 RID。其它构建系统可直接使用 `build/native/<rid>/include`、`lib` 和 `lib/pkgconfig`。
 
+## AAR 包（Android）
+
+**打包格式选择 AAR** 时，勾选需要的 Android ABI，Release 中是一个 `.aar`（`ffmpeg-android-<ABI 列表>-<许可证>-<编号>.aar`）。AAR 与 NuGet 一样固定使用共享库。
+
+```text
+jni/<abi>/*.so                       FFmpeg（以及共享的第三方）库，会打包进 APK
+prefab/prefab.json                   Prefab 包 "ffmpeg"
+prefab/modules/<库>/include/         该库的头文件（libavcodec/...）
+prefab/modules/<库>/libs/android.<abi>/   用于链接的库文件
+AndroidManifest.xml、classes.jar     包名 io.github.<所有者>.ffmpeg，minSdk 21
+```
+
+- **Java / Kotlin（JNI）**：添加 AAR（`implementation(files("libs/ffmpeg-....aar"))`），`.so` 会进入 APK，可用 `System.loadLibrary("avcodec")` 等加载。
+- **NDK（C / C++）**：启用 `android { buildFeatures { prefab = true } }`，然后在 CMake 中 `find_package(ffmpeg REQUIRED CONFIG)`、`target_link_libraries(app ffmpeg::avformat)`；每个模块自带头文件和它依赖的 FFmpeg 库。
+- AAR 不包含 `ffmpeg` / `ffprobe` 程序。
+
+## XCFramework（Apple）
+
+**打包格式选择 XCFramework** 时，平台变为 **Apple**，可以同时勾选 macOS、iOS、tvOS、visionOS、Mac Catalyst 的目标（真机与模拟器）。Release 中是 `ffmpeg-apple-xcframework-<许可证>-<编号>.zip`，其中每个 FFmpeg 库和每个第三方库各一个 `<库>.xcframework`（`libavcodec.xcframework`、`libx264.xcframework` 等）。同一平台变体的多个目标会用 lipo 合并为一个切片（如 arm64 与 x86_64 模拟器）。
+
+| 链接方式 | 内容 | 用法 |
+|---|---|---|
+| 静态 | `.a` 切片；FFmpeg 的库带头文件（`libavcodec/avcodec.h`） | 链接进应用；用到的 XCFramework（包括第三方库）都要加入 |
+| 共享 | 每个切片一个 `libavcodec.framework` 等（install name 为 `@rpath/libavcodec.framework/libavcodec`，内含头文件） | 在应用中 Embed & Sign；App Store 接受动态 framework，不接受普通 dylib |
+
+- 不提供“静态 + 共享”：一个 XCFramework 只能包含一种形式。
+- 打包为压缩包时只支持静态库的 iOS / tvOS / visionOS，在这里可以选择共享（以 framework 形式）。
+- 只打包库，不包含 `ffmpeg` / `ffprobe` 程序。
+- Swift Package Manager：把 XCFramework 作为 `binaryTarget` 引用；CocoaPods：`vendored_frameworks`。
+
 ## 第三方库
 
 参照官方预编译版本（如 BtbN 的 FFmpeg-Builds、evermeet.cx）的做法，下列库会针对每个目标平台从源码编译并静态链接，产物运行时不依赖这些库。每个库对应 `deps/NN-name.sh` 中的一个编译脚本，版本、下载地址和 SHA256 都已固定。
@@ -211,6 +241,7 @@ static extern IntPtr av_version_info();
 | zlib | 1.3.2 | zlib | （自动检测） | |
 
 - **许可证**：x264 和 x265 是 GPL，只有选择 GPL 许可证时才可用，此时产物也是 GPL；其余库可用于 LGPL 构建。
+- **静态或共享**：**第三方库链接**选项（默认静态）可以把第三方库编译为静态库链接进 FFmpeg，或编译为共享库随包提供（`.so` / `.dylib` / `.dll`，XCFramework 中为 framework）。共享库可以单独替换，适用于 LGPL 合规（LAME、FriBidi、SoX）、安全更新（如 libwebp）或与应用其他部分共用同一份库。共享需要目标能加载共享库（WebAssembly 不行；iOS / tvOS / visionOS 只能用于 XCFramework）。Windows 上的 zlib、zimg，以及 Linux / FreeBSD / macOS 以外的 libvpx 仍为静态。
 - **缓存**：每个目标平台第一次编译第三方库约需 20–40 分钟，结果保存在 Actions 缓存中，之后的编译直接复用。也可以先运行一次 **Actions → build-deps → Run workflow**，为所有平台预热缓存。修改某个库的脚本只会重新编译这个库。
 - **添加新库**：新增 `deps/NN-name.sh`，写明 `DEP_VERSION`、`DEP_URL`、`DEP_SHA256`，并用 `scripts/build-deps.sh` 提供的 `autotools_build`、`cmake_build` 或 `meson_build` 实现 `dep_build`；再在 `docs/configure.js` 和 `docs/i18n.js` 中为它的 `--enable-lib...` 参数加一个开关。
 
@@ -229,6 +260,7 @@ static extern IntPtr av_version_info();
 |---|---|---|
 | 构建类型 | **Release**（默认）／RelWithDebInfo／Debug | `--disable-debug`／`--disable-stripping`／`--enable-debug=3 --disable-optimizations --disable-stripping` |
 | 链接方式 | **静态**（默认）／共享／静态 + 共享 | `--enable-static --disable-shared`／`--enable-shared --disable-static`／两者都启用 |
+| 第三方库链接 | **静态**（默认）／共享 | 不是 configure 参数，作为 `deps_linkage` 参数提交 |
 | 许可证 | LGPL／**GPL**（默认） | 不加参数／`--enable-gpl` |
 | 程序与库 | ffmpeg、ffprobe、libavdevice、libavfilter、libswscale、libswresample、文档 | 取消勾选即 `--disable-<名称>`（文档默认不生成：`--disable-doc`） |
 | 功能特性 | 汇编优化、硬件加速、网络协议、自动探测系统库、体积优化、PIC | `--disable-asm`、`--disable-hwaccels`、`--disable-network`、`--disable-autodetect`、`--enable-small`、`--enable-pic` |
@@ -278,7 +310,7 @@ static extern IntPtr av_version_info();
 
 - **Linux 交叉编译的指令集**需要 glibc 2.31+（高于 x86_64 / arm64 的 2.28；loongarch64 为 2.36+），并以发行版基线为目标：armv7 为 armhf（VFPv3-D16，不假定 NEON），armel 为 ARMv5TE 软浮点，MIPS 为 MIPS32r2 / MIPS64r2（不使用 DSP / MSA / 龙芯扩展）。部分库在这些平台使用纯 C 实现（libaom、libvpx、zimg；x264 在 armel / s390x / riscv64 / MIPS 上），编码速度低于 x86_64 / arm64。
 - **冒烟测试**：Windows、Android、Apple 移动平台、FreeBSD 和 WebAssembly 为交叉编译，编译机无法运行产物，因此不运行 `ffmpeg -version`。
-- **Apple 移动平台 / WebAssembly** 的产物只有静态库（FFmpeg 的库以及 `lib/` 中的第三方库），需要链接进你的应用；暂不提供 `.xcframework` 打包。
+- **Apple 移动平台 / WebAssembly** 的压缩包只有静态库（FFmpeg 的库以及 `lib/` 中的第三方库）；需要 framework 时请使用 XCFramework 格式。
 - **x265** 目前只编译 8-bit（暂不支持 10/12-bit 多位深）。
 - **TLS**：Linux、Android、visionOS、Mac Catalyst、FreeBSD 和 WebAssembly 构建没有 TLS 库，因此不支持 `https`；Windows 使用 Schannel，Apple 平台使用系统 TLS。
 - **Linux 上的 libass** 未编译 fontconfig：字幕字体来自字幕文件内嵌的字体或滤镜的 `fontsdir` 参数。

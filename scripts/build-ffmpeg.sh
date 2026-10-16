@@ -203,9 +203,10 @@ fix_macos_install_names() {
 
     while IFS= read -r dep; do
       install_name_tool -change "$dep" "@rpath/$(basename "$dep")" "$f"
-    # Libraries of the package and shared third-party libraries (bundle_shared_deps).
+    # Libraries of the package and shared third-party libraries (bundle_shared_deps); some of
+    # those use a bare name (libvpx.12.dylib) as their install name.
     done < <(otool -L "$f" | awk -v p="$lib_dir/" -v d="${DEPS_PREFIX:-/nonexistent}/lib/" \
-      'NR > 1 && (index($1, p) == 1 || index($1, d) == 1) { print $1 }')
+      'NR > 1 && (index($1, p) == 1 || index($1, d) == 1 || $1 !~ /\//) { print $1 }')
 
     for rpath in "${rpaths[@]}"; do
       install_name_tool -add_rpath "$rpath" "$f" 2>/dev/null || true
