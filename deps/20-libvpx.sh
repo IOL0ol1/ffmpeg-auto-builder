@@ -2,9 +2,9 @@
 DEP_VERSION=1.17.0
 DEP_URL="https://github.com/webmproject/libvpx/archive/refs/tags/v${DEP_VERSION}.tar.gz"
 DEP_SHA256=1020f184046187baa2985dbde38e0691f49c44088bca7a1842b0236c6081dc0a
-# libvpx builds shared libraries for ELF and macOS targets only.
+# libvpx builds shared libraries for ELF (but not Android) and macOS targets only.
 case "$TARGET_PLATFORM" in
-  linux | android | freebsd | macos) ;;
+  linux | freebsd | macos) ;;
   *) DEP_SHARED=no ;;
 esac
 
