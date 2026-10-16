@@ -41,8 +41,12 @@ if [[ -n "${DEPS_PREFIX:-}" ]]; then
   case "$TARGET_PLATFORM/$TARGET_ARCH" in
     # The 32-bit x86 assembly needs text relocations, which Android rejects.
     android/x86) injected_args+=("--disable-asm") ;;
-    # The Core Image filters use NSOpenGL, which Mac Catalyst does not have.
-    maccatalyst/*) injected_args+=("--disable-coreimage") ;;
+    # Mac Catalyst has neither NSOpenGL (Core Image filters) nor Secure Transport.
+    maccatalyst/*) injected_args+=("--disable-coreimage" "--disable-securetransport") ;;
+    # visionOS has no AVFoundation capture devices.
+    visionos/*) injected_args+=("--disable-indev=avfoundation") ;;
+    # The MIPS FPU inline assembly uses odd float registers, which the o32 ABI forbids.
+    linux/mipsel) injected_args+=("--disable-mipsfpu") ;;
   esac
   # On Intel Macs Homebrew lives in /usr/local, which the compiler searches by default, so
   # link-test autodetection would pick up its liblzma / libX11 and tie the binaries to it.

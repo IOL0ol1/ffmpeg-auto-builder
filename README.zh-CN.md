@@ -239,7 +239,7 @@ static extern IntPtr av_version_info();
   - **依赖自动联动**：关闭 libavfilter 会同时关闭 ffmpeg（ffmpeg 依赖它），勾选 ffmpeg 会自动开启 libavfilter，页面会提示并高亮被联动的选项。
   - **许可证**：仅限 GPL 的组件（如 `hqdn3d`、`delogo`、`eq`、`cropdetect`、`mpdecimate` 滤镜）带 **GPL** 标记，选择 LGPL 时变灰不可选。
   - **库依赖**：关闭 libswscale / libswresample 后，精简模式中的 `scale` / `aresample` 滤镜变灰不可选。
-  - **目标平台**：`https` 协议只在系统提供 TLS 的平台可选（macOS、Windows、iOS、tvOS、visionOS、Mac Catalyst）。iOS / tvOS / visionOS / WebAssembly 只能静态链接、不编译 ffmpeg / ffprobe 程序，也不能选择 NuGet。
+  - **目标平台**：`https` 协议只在系统提供 TLS 的平台可选（macOS、Windows、iOS、tvOS、visionOS）。iOS / tvOS / visionOS / WebAssembly 只能静态链接、不编译 ffmpeg / ffprobe 程序，也不能选择 NuGet。
   - **第三方库**：x264 / x265（GPL）在 LGPL 下不可选；SVT-AV1 只在 64 位 x86 / Arm 目标上可选；WebAssembly（单线程）不提供 x265、SVT-AV1、dav1d 和 libass；NuGet 勾选多个指令集时，库必须在所有勾选的指令集上都可用。
   - **精简模式**：`file` 协议固定保留，保证能读写本地文件。
   - 灰色选项悬停可查看原因；限制解除后（如切回 GPL），之前的勾选会自动恢复。
@@ -279,7 +279,7 @@ static extern IntPtr av_version_info();
 - **冒烟测试**：Windows、Android、Apple 移动平台、FreeBSD 和 WebAssembly 为交叉编译，编译机无法运行产物，因此不运行 `ffmpeg -version`。
 - **Apple 移动平台 / WebAssembly** 的产物只有静态库（FFmpeg 的库以及 `lib/` 中的第三方库），需要链接进你的应用；暂不提供 `.xcframework` 打包。
 - **x265** 目前只编译 8-bit（暂不支持 10/12-bit 多位深）。
-- **TLS**：Linux、Android、FreeBSD 和 WebAssembly 构建没有 TLS 库，因此不支持 `https`；Windows 使用 Schannel，Apple 平台使用系统 TLS。
+- **TLS**：Linux、Android、Mac Catalyst、FreeBSD 和 WebAssembly 构建没有 TLS 库，因此不支持 `https`；Windows 使用 Schannel，Apple 平台使用系统 TLS。
 - **Linux 上的 libass** 未编译 fontconfig：字幕字体来自字幕文件内嵌的字体或滤镜的 `fontsdir` 参数。
 - 每个目标平台第一次编译第三方库约需 20–40 分钟，缓存后不再重复。
 - **macOS Intel**：GitHub 预计在 2027 年秋随 macOS 15 镜像退役而停止提供 Intel runner，届时 macOS x86_64 / universal 需改为在 arm64 上交叉编译。
