@@ -3,6 +3,9 @@
 DEP_VERSION=3.15.2
 DEP_URL="https://storage.googleapis.com/aom-releases/libaom-${DEP_VERSION}.tar.gz"
 DEP_SHA256=67bb54b245f33ed98600e08269e6139986e48114e14042474ddd8885801dfddc
+# With CMake's iOS-like system names libaom exports symbols through a GNU version script,
+# which Apple's linker cannot read; it stays static there (linked into libavcodec).
+case "$TARGET_PLATFORM" in ios | tvos | visionos) DEP_SHARED=no ;; esac
 
 dep_build() {
   fetch_source
