@@ -12,6 +12,8 @@ dep_build() {
     -e 's/cmake_policy(SET CMP0054 OLD)/cmake_policy(SET CMP0054 NEW)/' \
     -e 's/STREQUAL "Clang"/MATCHES "Clang"/g' \
     CMakeLists.txt
+  # Bionic has the pthreads functions in libc and no libpthread.
+  [[ "$TARGET_PLATFORM" != android ]] || sed -i.bak 's/list(APPEND PLATFORM_LIBS pthread)//' CMakeLists.txt
   # Assembly only on 64-bit targets; it does not build for 32-bit x86 / ARM or with
   # llvm-mingw for ARM64 Windows.
   local asm=OFF
