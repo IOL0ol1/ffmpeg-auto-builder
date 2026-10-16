@@ -11,6 +11,14 @@ on:
         required: false
         type: string
         default: ''
+      linkage:
+        description: Build the libraries static or shared (the deps_linkage of build-ffmpeg)
+        required: true
+        type: choice
+        options:
+          - static
+          - shared
+        default: static
 
 permissions:
   contents: read
@@ -44,6 +52,7 @@ jobs:
       TARGET_PLATFORM: ${{ matrix.platform }}
       TARGET_ARCH: ${{ matrix.arch }}
       TARGET_TOOLCHAIN: ${{ matrix.toolchain }}
+      DEPS_LINKAGE: ${{ inputs.linkage }}
       MACOSX_DEPLOYMENT_TARGET: '11.0'
     steps:
       - name: Check out repository
@@ -57,16 +66,19 @@ jobs:
         id: prefix
         shell: bash
         run: |
-          echo "DEPS_PREFIX=$GITHUB_WORKSPACE/.deps/prefix" >> "$GITHUB_ENV"
+          suffix="${DEPS_LINKAGE/static/}"
+          echo "DEPS_PREFIX=$GITHUB_WORKSPACE/.deps/prefix${suffix:+-$suffix}" >> "$GITHUB_ENV"
+          echo "deps_path=.deps/prefix${suffix:+-$suffix}" >> "$GITHUB_OUTPUT"
+          echo "deps_key=deps-v3-${suffix:+$suffix-}${{ matrix.platform }}-${{ matrix.arch }}" >> "$GITHUB_OUTPUT"
           echo "toolchain=${{ hashFiles('scripts/build-deps.sh', 'scripts/toolchain.sh', 'scripts/install-deps.sh', format('scripts/platforms/{0}.sh', matrix.toolchain)) }}" >> "$GITHUB_OUTPUT"
 
       - name: Restore dependencies
         uses: actions/cache/restore@v4
         with:
-          path: .deps/prefix
+          path: ${{ steps.prefix.outputs.deps_path }}
           # Newest prefix built with this toolchain; per-library stamps skip what is current.
-          key: deps-v3-${{ matrix.platform }}-${{ matrix.arch }}-${{ steps.prefix.outputs.toolchain }}-${{ github.run_id }}
-          restore-keys: deps-v3-${{ matrix.platform }}-${{ matrix.arch }}-${{ steps.prefix.outputs.toolchain }}-
+          key: ${{ steps.prefix.outputs.deps_key }}-${{ steps.prefix.outputs.toolchain }}-${{ github.run_id }}
+          restore-keys: ${{ steps.prefix.outputs.deps_key }}-${{ steps.prefix.outputs.toolchain }}-
 
       - name: Build dependencies
         id: build
@@ -78,11 +90,11 @@ jobs:
         if: always() && steps.build.outputs.changed == 'true'
         uses: actions/cache/save@v4
         with:
-          path: .deps/prefix
-          key: deps-v3-${{ matrix.platform }}-${{ matrix.arch }}-${{ steps.prefix.outputs.toolchain }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.prefix.outputs.deps_path }}
+          key: ${{ steps.prefix.outputs.deps_key }}-${{ steps.prefix.outputs.toolchain }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: List libraries
         shell: bash
         run: |
-          ls -la .deps/prefix/lib
-          ls .deps/prefix/lib/pkgconfig
+          ls -la "$DEPS_PREFIX/lib"
+          ls "$DEPS_PREFIX/lib/pkgconfig"

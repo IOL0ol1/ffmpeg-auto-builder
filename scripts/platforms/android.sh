@@ -26,7 +26,7 @@ android_abi() {
 
 platform_install() {
   sudo apt-get update
-  sudo apt-get install -y nasm pkg-config ccache zip unzip automake autoconf libtool cmake pipx
+  sudo apt-get install -y nasm pkg-config ccache zip unzip automake autoconf libtool cmake pipx patchelf
   install_python_build_tools
 
   # GitHub's Ubuntu images ship the Android SDK with several NDKs; install the pinned one

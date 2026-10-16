@@ -1,7 +1,8 @@
 """Build targets from docs/targets.json for the workflow scripts.
 
-  targets.py resolve <platform> <archs> <format>
-      Validate a request; <archs> is one architecture, or a comma-separated list for NuGet.
+  targets.py resolve <platform> <archs> <format> [static|shared]
+      Validate a request; <archs> is one architecture, or a comma-separated list for NuGet;
+      the last argument is the linkage of the third-party libraries.
       Prints key=value lines for $GITHUB_OUTPUT (archs, matrix, merges, needs_merge). On an
       invalid request prints "error<TAB>code<TAB>value<TAB>allowed values" and exits 2.
   targets.py all [platform]
@@ -43,7 +44,7 @@ def nuget_capable(platform):
     return "shared" in PLATFORMS[platform].get("linkage", ["shared"])
 
 
-def resolve(platform, arch_spec, package_format):
+def resolve(platform, arch_spec, package_format, deps_linkage="static"):
     if platform not in PLATFORMS:
         error("platform", platform, " / ".join(PLATFORMS))
     archs_of = PLATFORMS[platform]["archs"]
@@ -61,6 +62,10 @@ def resolve(platform, arch_spec, package_format):
         error("archMulti", arch_spec)
     if nuget and not nuget_capable(platform):
         error("nugetPlatform", platform)
+    if deps_linkage not in ("static", "shared"):
+        error("depsLinkage", deps_linkage)
+    if deps_linkage == "shared" and not nuget_capable(platform):
+        error("depsShared", PLATFORMS[platform]["label"])
 
     include, merges = [], []
     for arch in archs:
@@ -78,8 +83,8 @@ def resolve(platform, arch_spec, package_format):
 
 def main(argv):
     command = argv[1] if len(argv) > 1 else ""
-    if command == "resolve" and len(argv) == 5:
-        resolve(argv[2], argv[3], argv[4])
+    if command == "resolve" and len(argv) in (5, 6):
+        resolve(*argv[2:])
     elif command == "all":
         only = argv[2] if len(argv) > 2 else ""
         include = [entry(p, a) for p, spec in PLATFORMS.items() if not only or p == only

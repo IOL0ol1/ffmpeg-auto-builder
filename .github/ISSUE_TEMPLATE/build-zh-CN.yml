@@ -45,6 +45,12 @@ body:
       value: x86_64
     validations:
       required: true
+  - type: input
+    id: deps_linkage
+    attributes:
+      label: 第三方库链接方式
+      description: "static（链接进 FFmpeg）或 shared（作为单独的共享库随包提供）"
+      value: static
   - type: textarea
     id: configure_options
     attributes:

@@ -44,6 +44,14 @@ on:
         required: true
         type: string
         default: x86_64
+      deps_linkage:
+        description: Third-party libraries static (linked into FFmpeg) or shared (separate libraries)
+        required: true
+        type: choice
+        options:
+          - static
+          - shared
+        default: static
       configure_options:
         description: FFmpeg configure options
         required: true
@@ -81,6 +89,7 @@ jobs:
       target_arch: ${{ steps.params.outputs.target_arch }}
       package_format: ${{ steps.params.outputs.package_format }}
       archive_format: ${{ steps.params.outputs.archive_format }}
+      deps_linkage: ${{ steps.params.outputs.deps_linkage }}
       configure_options: ${{ steps.params.outputs.configure_options }}
       release_tag: ${{ steps.params.outputs.release_tag }}
       matrix: ${{ steps.params.outputs.matrix }}
@@ -111,6 +120,7 @@ jobs:
           INPUT_TARGET_PLATFORM: ${{ inputs.target_platform }}
           INPUT_TARGET_ARCH: ${{ inputs.target_arch }}
           INPUT_PACKAGE_FORMAT: ${{ inputs.package_format }}
+          INPUT_DEPS_LINKAGE: ${{ inputs.deps_linkage }}
           INPUT_CONFIGURE_OPTIONS: ${{ inputs.configure_options }}
         run: |
           if ! ./scripts/resolve-params.sh 2>"$RUNNER_TEMP/resolve-error.log"; then
@@ -157,6 +167,7 @@ jobs:
       PACKAGE_FORMAT: ${{ needs.setup.outputs.archive_format }}
       CONFIGURE_OPTIONS: ${{ needs.setup.outputs.configure_options }}
       RELEASE_TAG: ${{ needs.setup.outputs.release_tag }}
+      DEPS_LINKAGE: ${{ needs.setup.outputs.deps_linkage }}
       MACOSX_DEPLOYMENT_TARGET: '11.0'
       CCACHE_MAXSIZE: 500M
     steps:
@@ -196,7 +207,11 @@ jobs:
         shell: bash
         run: |
           echo "CCACHE_DIR=$GITHUB_WORKSPACE/.ccache" >> "$GITHUB_ENV"
-          echo "DEPS_PREFIX=$GITHUB_WORKSPACE/.deps/prefix" >> "$GITHUB_ENV"
+          # Static and shared third-party libraries are separate prefixes and cache entries.
+          suffix="${DEPS_LINKAGE/static/}"
+          echo "DEPS_PREFIX=$GITHUB_WORKSPACE/.deps/prefix${suffix:+-$suffix}" >> "$GITHUB_ENV"
+          echo "deps_path=.deps/prefix${suffix:+-$suffix}" >> "$GITHUB_OUTPUT"
+          echo "deps_key=deps-v3-${suffix:+$suffix-}${{ matrix.platform }}-${{ matrix.arch }}" >> "$GITHUB_OUTPUT"
           # Toolchain changes of one platform do not invalidate the others' libraries.
           echo "toolchain=${{ hashFiles('scripts/build-deps.sh', 'scripts/toolchain.sh', 'scripts/install-deps.sh', format('scripts/platforms/{0}.sh', matrix.toolchain)) }}" >> "$GITHUB_OUTPUT"
 
@@ -204,9 +219,9 @@ jobs:
       - name: Restore third-party libraries
         uses: actions/cache/restore@v4
         with:
-          path: .deps/prefix
-          key: deps-v3-${{ matrix.platform }}-${{ matrix.arch }}-${{ steps.dirs.outputs.toolchain }}-${{ github.run_id }}
-          restore-keys: deps-v3-${{ matrix.platform }}-${{ matrix.arch }}-${{ steps.dirs.outputs.toolchain }}-
+          path: ${{ steps.dirs.outputs.deps_path }}
+          key: ${{ steps.dirs.outputs.deps_key }}-${{ steps.dirs.outputs.toolchain }}-${{ github.run_id }}
+          restore-keys: ${{ steps.dirs.outputs.deps_key }}-${{ steps.dirs.outputs.toolchain }}-
 
       - name: Build third-party libraries
         id: deps
@@ -217,8 +232,8 @@ jobs:
         if: always() && steps.deps.outputs.changed == 'true'
         uses: actions/cache/save@v4
         with:
-          path: .deps/prefix
-          key: deps-v3-${{ matrix.platform }}-${{ matrix.arch }}-${{ steps.dirs.outputs.toolchain }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.dirs.outputs.deps_path }}
+          key: ${{ steps.dirs.outputs.deps_key }}-${{ steps.dirs.outputs.toolchain }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Restore ccache
         uses: actions/cache@v4

@@ -45,6 +45,12 @@ body:
       value: x86_64
     validations:
       required: true
+  - type: input
+    id: deps_linkage
+    attributes:
+      label: サードパーティライブラリのリンク
+      description: "static（FFmpeg に静的リンク）または shared（個別の共有ライブラリとして同梱）"
+      value: static
   - type: textarea
     id: configure_options
     attributes:

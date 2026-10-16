@@ -440,7 +440,9 @@ function syncConfigUI() {
       const status = segmentOptionStatus(context, segment.id, button.dataset.value);
       const option = segment.options.find((item) => item.id === button.dataset.value);
       button.disabled = !status.available;
-      button.title = status.available ? (option.flags.join(' ') || t('config.noFlags')) : t(`reason.${status.reason}`);
+      button.title = status.available
+        ? (segment.param ? t(`option.${segment.id}.${option.id}.hint`) : option.flags.join(' ') || t('config.noFlags'))
+        : t(`reason.${status.reason}`);
     });
     segmentsNode.querySelector(`[data-hint-for="${segment.id}"]`).textContent = t(`option.${segment.id}.${value}.hint`);
   });
@@ -521,6 +523,7 @@ function readForm() {
     targetPlatform: value('targetPlatform'),
     targetArch: selectedArchs().join(','),
     packageFormat: value('packageFormat'),
+    depsLinkage: effectiveSegmentValue(state.config, configContext(), 'depsLinkage'),
     configureOptions: buildConfigure(state.config, configContext()).options,
   };
 }
@@ -543,6 +546,7 @@ function buildIssueUrl(params) {
     target_platform: params.targetPlatform,
     target_arch: params.targetArch,
     package_format: params.packageFormat,
+    deps_linkage: params.depsLinkage,
     configure_options: params.configureOptions,
   });
   return repoUrl(`/issues/new?${query}`);

@@ -108,6 +108,46 @@ bundle_static_deps() {
   done
 }
 
+# Shared third-party libraries (DEPS_LINKAGE=shared) are shipped next to FFmpeg's.
+bundle_shared_deps() {
+  [[ "${DEPS_LINKAGE:-static}" == shared && -n "${DEPS_PREFIX:-}" ]] || return 0
+  local f
+  if [[ "$TARGET_PLATFORM" == windows ]]; then
+    for f in "$DEPS_PREFIX"/bin/*.dll; do
+      cp "$f" "$install_root/bin/"
+    done
+  else
+    # cp -a keeps the version symlinks (libx264.so -> libx264.so.164).
+    for f in "$DEPS_PREFIX"/lib/*.so* "$DEPS_PREFIX"/lib/*.dylib; do
+      cp -a "$f" "$install_root/lib/"
+    done
+  fi
+}
+
+# Android only loads unversioned libfoo.so files; rename versioned third-party libraries
+# (libx264.so.164) and update their SONAMEs and the references to them.
+fix_android_sonames() {
+  local f soname name renames=()
+  for f in "$install_root"/lib/*.so*; do
+    [[ -f "$f" && ! -L "$f" ]] || continue
+    soname="$(patchelf --print-soname "$f")"
+    [[ "$soname" == *.so.* ]] || continue
+    name="${soname%%.so.*}.so"
+    rm -f "$install_root/lib/$name"
+    mv "$f" "$install_root/lib/$name"
+    patchelf --set-soname "$name" "$install_root/lib/$name"
+    renames+=("$soname" "$name")
+  done
+  find "$install_root/lib" -maxdepth 1 -name '*.so.*' -type l -delete
+  local i
+  for f in "$install_root"/lib/*.so "$install_root"/bin/*; do
+    [[ -f "$f" && ! -L "$f" ]] || continue
+    for ((i = 0; i < ${#renames[@]}; i += 2)); do
+      patchelf --replace-needed "${renames[i]}" "${renames[i + 1]}" "$f"
+    done
+  done
+}
+
 # Rewrite absolute install paths in pkg-config files to be relative to the .pc file; the
 # third-party libraries are in the same lib/ (bundle_static_deps) or linked in already.
 fix_pkgconfig() {
@@ -163,7 +203,9 @@ fix_macos_install_names() {
 
     while IFS= read -r dep; do
       install_name_tool -change "$dep" "@rpath/$(basename "$dep")" "$f"
-    done < <(otool -L "$f" | awk -v p="$lib_dir/" 'NR > 1 && index($1, p) == 1 { print $1 }')
+    # Libraries of the package and shared third-party libraries (bundle_shared_deps).
+    done < <(otool -L "$f" | awk -v p="$lib_dir/" -v d="${DEPS_PREFIX:-/nonexistent}/lib/" \
+      'NR > 1 && (index($1, p) == 1 || index($1, d) == 1) { print $1 }')
 
     for rpath in "${rpaths[@]}"; do
       install_name_tool -add_rpath "$rpath" "$f" 2>/dev/null || true
@@ -207,10 +249,12 @@ install_cmake_config() {
 }
 
 bundle_static_deps
+bundle_shared_deps
 fix_pkgconfig
 install_cmake_config
 case "$TARGET_PLATFORM" in
   linux | freebsd)     fix_linux_rpath ;;
+  android)             fix_android_sonames ;;
   macos | maccatalyst) fix_macos_install_names ;;
   windows)             bundle_windows_runtime; fix_windows_import_libs ;;
 esac

@@ -59,6 +59,17 @@ export const SEGMENTS = [
     ],
   },
   {
+    // Not a configure flag: how the third-party libraries (deps/*.sh) are built and linked.
+    // It is sent to the workflow as its own parameter (deps_linkage).
+    id: 'depsLinkage',
+    param: true,
+    default: 'static',
+    options: [
+      { id: 'static', flags: [] },
+      { id: 'shared', flags: [] },
+    ],
+  },
+  {
     // No built-in component requires version3; it only matters for third-party libraries,
     // so GPL v3 is not offered (--enable-version3 can still be added as a custom flag).
     id: 'license',
@@ -243,6 +254,10 @@ export function segmentOptionStatus(context, segmentId, optionId) {
   }
   const linkage = PLATFORMS[context.platform]?.linkage;
   if (segmentId === 'linkage' && linkage && !linkage.includes(optionId)) {
+    return { available: false, reason: 'targetLinkage' };
+  }
+  // Shared third-party libraries need a target that can load shared libraries.
+  if (segmentId === 'depsLinkage' && optionId === 'shared' && !segmentOptionStatus(context, 'linkage', 'shared').available) {
     return { available: false, reason: 'targetLinkage' };
   }
   return { available: true };

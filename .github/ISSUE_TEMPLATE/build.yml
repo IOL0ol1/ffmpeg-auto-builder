@@ -45,6 +45,12 @@ body:
       value: x86_64
     validations:
       required: true
+  - type: input
+    id: deps_linkage
+    attributes:
+      label: Third-party library linking
+      description: "static (linked into FFmpeg) or shared (shipped as separate shared libraries)"
+      value: static
   - type: textarea
     id: configure_options
     attributes:

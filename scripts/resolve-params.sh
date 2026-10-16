@@ -15,6 +15,8 @@ msg() {
     ja/arch)           printf 'ターゲットアーキテクチャが不正です：%s（%s のいずれか）' "$arg" "$allowed" ;;
     ja/archMulti)      printf '複数のアーキテクチャを指定できるのは NuGet パッケージ形式のみです：%s' "$arg" ;;
     ja/nugetPlatform)  printf '%s は静的ライブラリのみ対応のため NuGet パッケージにできません（NuGet は共有ライブラリが必要です）' "$arg" ;;
+    ja/depsLinkage)    printf 'サードパーティライブラリのリンクが不正です：%s（static / shared のいずれか）' "$arg" ;;
+    ja/depsShared)     printf '%s は共有ライブラリに対応していないため、サードパーティライブラリは static のみです' "$arg" ;;
     ja/format)         printf 'パッケージ形式が不正です：%s（tar.gz / zip / nuget のいずれか）' "$arg" ;;
     ja/repo)           printf 'GitHub リポジトリのみ対応しています：%s' "$arg" ;;
     ja/ref)            printf 'ブランチ / タグ / コミットが不正です：%s' "$arg" ;;
@@ -24,6 +26,8 @@ msg() {
     zh-CN/arch)        printf '目标指令集无效：%s（可选 %s）' "$arg" "$allowed" ;;
     zh-CN/archMulti)   printf '只有 NuGet 打包格式可以选择多个指令集：%s' "$arg" ;;
     zh-CN/nugetPlatform) printf '%s 只支持静态库，不能打包为 NuGet（NuGet 包需要共享库）' "$arg" ;;
+    zh-CN/depsLinkage) printf '第三方库链接方式无效：%s（可选 static / shared）' "$arg" ;;
+    zh-CN/depsShared)  printf '%s 不支持共享库，第三方库只能选 static' "$arg" ;;
     zh-CN/format)      printf '打包格式无效：%s（可选 tar.gz / zip / nuget）' "$arg" ;;
     zh-CN/repo)        printf '源码仓库只支持 GitHub 地址：%s' "$arg" ;;
     zh-CN/ref)         printf '源码分支 / tag / commit 无效：%s' "$arg" ;;
@@ -33,6 +37,8 @@ msg() {
     */arch)            printf 'Invalid target architecture: %s (one of %s)' "$arg" "$allowed" ;;
     */archMulti)       printf 'Several architectures can only be selected for the NuGet package format: %s' "$arg" ;;
     */nugetPlatform)   printf '%s only supports static libraries, so it cannot be packaged as NuGet (NuGet needs shared libraries)' "$arg" ;;
+    */depsLinkage)     printf 'Invalid third-party library linking: %s (static or shared)' "$arg" ;;
+    */depsShared)      printf '%s does not support shared libraries; the third-party libraries can only be static' "$arg" ;;
     */format)          printf 'Invalid package format: %s (one of tar.gz / zip / nuget)' "$arg" ;;
     */repo)            printf 'Only GitHub repositories are supported: %s' "$arg" ;;
     */ref)             printf 'Invalid branch / tag / commit: %s' "$arg" ;;
@@ -57,6 +63,7 @@ else
   target_platform="${INPUT_TARGET_PLATFORM:-}"
   target_arch="${INPUT_TARGET_ARCH:-}"
   package_format="${INPUT_PACKAGE_FORMAT:-}"
+  deps_linkage="${INPUT_DEPS_LINKAGE:-}"
   configure_options="${INPUT_CONFIGURE_OPTIONS:-}"
   tag_suffix="r${GITHUB_RUN_ID:-0}"
 fi
@@ -71,7 +78,9 @@ esac
 # Platform and architectures come from docs/targets.json; NuGet takes a comma-separated list
 # of architectures, the other formats exactly one.
 target_arch="$(printf '%s' "$target_arch" | tr -d ' ')"
-if ! resolved="$(python3 -I "$script_dir/targets.py" resolve "$target_platform" "$target_arch" "$package_format")"; then
+# Issues created before the field existed build the libraries statically.
+deps_linkage="${deps_linkage:-static}"
+if ! resolved="$(python3 -I "$script_dir/targets.py" resolve "$target_platform" "$target_arch" "$package_format" "$deps_linkage")"; then
   IFS=$'\t' read -r _ code value allowed <<<"$resolved"
   fail "$(msg "$code" "$value" "$allowed")"
 fi
@@ -113,6 +122,7 @@ validate_release_tag "$release_tag"
   echo "target_arch=${resolved_archs//./,}"
   echo "package_format=${package_format}"
   echo "archive_format=${archive_format}"
+  echo "deps_linkage=${deps_linkage}"
   echo "configure_options=${configure_options}"
   echo "release_tag=${release_tag}"
   echo "matrix=${resolved_matrix}"

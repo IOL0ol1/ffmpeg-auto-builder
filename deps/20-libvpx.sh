@@ -2,6 +2,11 @@
 DEP_VERSION=1.17.0
 DEP_URL="https://github.com/webmproject/libvpx/archive/refs/tags/v${DEP_VERSION}.tar.gz"
 DEP_SHA256=1020f184046187baa2985dbde38e0691f49c44088bca7a1842b0236c6081dc0a
+# libvpx builds shared libraries for ELF and macOS targets only.
+case "$TARGET_PLATFORM" in
+  linux | android | freebsd | macos) ;;
+  *) DEP_SHARED=no ;;
+esac
 
 dep_build() {
   fetch_source
@@ -37,8 +42,10 @@ dep_build() {
     # The NDK has no GNU assembler; libvpx uses clang's integrated one when AS is clang.
     android/arm*) export AS="$CC" ;;
   esac
+  local kind=(--enable-static --disable-shared)
+  dep_shared && kind=(--disable-static --enable-shared)
   ./configure --prefix="$DEPS_PREFIX" --target="$target" \
-    --enable-static --disable-shared --enable-pic --enable-vp9-highbitdepth \
+    "${kind[@]}" --enable-pic --enable-vp9-highbitdepth \
     --disable-examples --disable-tools --disable-docs --disable-unit-tests ${extra[@]+"${extra[@]}"}
   make -j"$(cpu_count)"
   make install

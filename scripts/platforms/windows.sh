@@ -48,7 +48,11 @@ platform_toolchain() {
   if [[ "$TARGET_ARCH" == "x86" ]]; then
     export CFLAGS="$CFLAGS -msse2 -mfpmath=sse" CXXFLAGS="$CXXFLAGS -msse2 -mfpmath=sse"
   fi
-  export LDFLAGS="-L$DEPS_PREFIX/lib -static"
+  # -static keeps the C++ runtime out of DLLs; with shared third-party libraries it would also
+  # skip their import libraries, so then the runtime DLLs are shipped instead.
+  local static=(-static)
+  [[ "${DEPS_LINKAGE:-static}" == static ]] || static=()
+  export LDFLAGS="-L$DEPS_PREFIX/lib ${static[*]}"
   TOOLCHAIN_BIN="$LLVM_MINGW/$triple/bin"
   TARGET_RUNNER="none"
   AUTOTOOLS_HOST_ARGS=(--host="$triple")
@@ -60,6 +64,6 @@ platform_toolchain() {
     "--cross-prefix=$triple-"
     "--cc=$CC"
     "--cxx=$CXX"
-    "--extra-ldflags=-static"
+    ${static[@]+"--extra-ldflags=${static[*]}"}
   )
 }

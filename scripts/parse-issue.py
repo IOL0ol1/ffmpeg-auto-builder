@@ -18,6 +18,7 @@ LABELS = {
         "目标平台": "target_platform",
         "目标指令集": "target_arch",
         "打包格式": "package_format",
+        "第三方库链接方式": "deps_linkage",
         "configure 参数": "configure_options",
     },
     "en": {
@@ -26,6 +27,7 @@ LABELS = {
         "Target platform": "target_platform",
         "Target architecture": "target_arch",
         "Package format": "package_format",
+        "Third-party library linking": "deps_linkage",
         "configure flags": "configure_options",
     },
     "ja": {
@@ -34,6 +36,7 @@ LABELS = {
         "ターゲットプラットフォーム": "target_platform",
         "ターゲットアーキテクチャ": "target_arch",
         "パッケージ形式": "package_format",
+        "サードパーティライブラリのリンク": "deps_linkage",
         "configure フラグ": "configure_options",
     },
 }

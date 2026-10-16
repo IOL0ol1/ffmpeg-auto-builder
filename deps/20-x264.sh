@@ -20,9 +20,11 @@ dep_build() {
   # x264 does not know Emscripten; a generic 32-bit host without threads builds portable C.
   local host=(${AUTOTOOLS_HOST_ARGS[@]+"${AUTOTOOLS_HOST_ARGS[@]}"})
   [[ "$TARGET_PLATFORM" != wasm ]] || { host=(--host=i686-gnu); asm=(--disable-asm --disable-thread); }
+  local kind=(--enable-static) target=install-lib-static
+  dep_shared && kind=(--enable-shared) target=install-lib-shared
   ./configure --prefix="$DEPS_PREFIX" ${host[@]+"${host[@]}"} \
-    --enable-static --enable-pic --disable-cli ${asm[@]+"${asm[@]}"} \
+    "${kind[@]}" --enable-pic --disable-cli ${asm[@]+"${asm[@]}"} \
     --disable-lavf --disable-swscale --disable-ffms --disable-gpac --disable-lsmash
   make -j"$(cpu_count)"
-  make install-lib-static
+  make "$target"
 }

@@ -3,6 +3,8 @@ DEP_VERSION=1.3.2
 DEP_URL="https://github.com/madler/zlib/releases/download/v${DEP_VERSION}/zlib-${DEP_VERSION}.tar.gz"
 DEP_SHA256=bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16
 DEP_FEATURE=  # always built
+# win32/Makefile.gcc builds the DLL with another name than the import library expects.
+[[ "$TARGET_PLATFORM" != windows ]] || DEP_SHARED=no
 
 dep_build() {
   fetch_source
@@ -20,7 +22,9 @@ dep_build() {
     # The s390x vector CRC does not build with the Ubuntu 20.04 compiler.
     local vx=()
     [[ "$TARGET_ARCH" != s390x ]] || vx=(--disable-crcvx)
-    ./configure --prefix="$DEPS_PREFIX" --static ${vx[@]+"${vx[@]}"}
+    local kind=(--static)
+    dep_shared && kind=()
+    ./configure --prefix="$DEPS_PREFIX" ${kind[@]+"${kind[@]}"} ${vx[@]+"${vx[@]}"}
     make -j"$(cpu_count)"
     make install
   fi
