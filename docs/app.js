@@ -339,10 +339,7 @@ function renderConfigControls() {
       segment.options.map((option) => ({ ...option, label: t(`option.${segment.id}.${option.id}`) })),
       (value) => updateConfig({ [segment.id]: value }),
     );
-    const hint = document.createElement('small');
-    hint.className = 'muted';
-    hint.dataset.hintFor = segment.id;
-    group.append(title, control, hint);
+    group.append(title, control);
     return group;
   }));
 
@@ -446,7 +443,6 @@ function syncConfigUI() {
         ? (segment.param ? t(`option.${segment.id}.${option.id}.hint`) : option.flags.join(' ') || t('config.noFlags'))
         : t(`reason.${status.reason}`);
     });
-    segmentsNode.querySelector(`[data-hint-for="${segment.id}"]`).textContent = t(`option.${segment.id}.${value}.hint`);
   });
   packageHintNode.textContent = MULTI_FORMATS.has(context.packageFormat) ? t(`form.package.${context.packageFormat}Hint`) : '';
 
