@@ -32,10 +32,14 @@ linux_cross() {
   esac
   sysroot="/usr/$triple"
   [[ "$1" != loongarch64 ]] || sysroot="$LOONGARCH_TOOLS/target"
-  # The DSP ASE checks add -mdsp / -mdspr2 to every file, which the baseline CPUs lack;
-  # MSA and MMI are detected at run time.
+  # Baseline MIPS only: the DSP ASE checks add -mdsp / -mdspr2 to every file, the Loongson
+  # extensions put 64-bit instructions into 32-bit code, and the MSA code does not build
+  # with GCC 9.
   case "$1" in
-    mips64el | mipsel) ffmpeg_extra=(--disable-mipsdsp --disable-mipsdspr2) ;;
+    mips64el | mipsel)
+      ffmpeg_extra=(--disable-mipsdsp --disable-mipsdspr2 --disable-msa --disable-mmi
+        --disable-loongson2 --disable-loongson3)
+      ;;
   esac
 }
 
@@ -74,11 +78,11 @@ platform_install() {
   linux_cross "$TARGET_ARCH" || fail "Unexpected Linux target outside the manylinux container: $TARGET_ARCH"
   export DEBIAN_FRONTEND=noninteractive
   local common=(build-essential pkg-config zip unzip xz-utils bzip2 automake autoconf libtool make
-    git ca-certificates curl patchelf ccache)
+    git ca-certificates curl ccache)
   apt-get update
   if [[ "$TARGET_ARCH" == loongarch64 ]]; then
     # Ubuntu 24.04: recent enough CMake and qemu-user; Python tools through pipx (PEP 668).
-    apt-get install -y --no-install-recommends "${common[@]}" cmake pipx qemu-user
+    apt-get install -y --no-install-recommends "${common[@]}" cmake pipx qemu-user patchelf
     install_python_build_tools
     install_loongarch_tools
     return
@@ -96,8 +100,9 @@ platform_install() {
   apt-get install -y --no-install-recommends "${common[@]}" python3-pip "${cross[@]}"
   install_python_build_tools
   [[ "$cpu_family" != x86 ]] || install_nasm_from_source
-  # The distribution's CMake 3.16 is older than some libraries require.
-  python3 -m pip install --quiet --user --upgrade cmake
+  # The distribution's CMake 3.16 is older than some libraries require, and its patchelf
+  # 0.10 corrupts big-endian (s390x) executables.
+  python3 -m pip install --quiet --user --upgrade cmake patchelf
 }
 
 platform_toolchain() {

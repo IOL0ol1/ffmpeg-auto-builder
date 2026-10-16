@@ -44,10 +44,15 @@ platform_toolchain() {
 
   local dir="$DEPS_PREFIX/../toolchain" tool
   mkdir -p "$dir"
-  # -fuse-ld also reaches compile-only steps; -Werror checks must not trip on that.
+  # lld only for link steps: build system checks fail on unused flags (-Werror=unused-...).
   for tool in clang clang++; do
-    printf '#!/bin/sh\nexec %s --target=%s --sysroot="%s" -fuse-ld=lld -Wno-unused-command-line-argument "$@"\n' \
-      "$tool" "$triple" "$FREEBSD_SYSROOT" >"$dir/$tool"
+    cat >"$dir/$tool" <<EOF
+#!/bin/sh
+for arg; do
+  case "\$arg" in -c | -E | -S) exec $tool --target=$triple --sysroot="$FREEBSD_SYSROOT" "\$@" ;; esac
+done
+exec $tool --target=$triple --sysroot="$FREEBSD_SYSROOT" -fuse-ld=lld "\$@"
+EOF
     chmod +x "$dir/$tool"
   done
   export CC="$dir/clang" CXX="$dir/clang++"

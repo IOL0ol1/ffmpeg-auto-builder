@@ -20,7 +20,9 @@ dep_build() {
     freebsd/x86_64)          cpu=(-DAOM_TARGET_CPU=x86_64) ;;
     # libaom's arm64 run-time CPU detection does not know FreeBSD; NEON is always there.
     freebsd/arm64)           cpu=(-DAOM_TARGET_CPU=arm64 -DCONFIG_RUNTIME_CPU_DETECT=0) ;;
-    ios/*x86_64 | tvos/*x86_64 | maccatalyst/x86_64) cpu=(-DAOM_TARGET_CPU=x86_64) ;;
+    # With CMake's iOS / tvOS system names libaom assembles x86 code as ELF, not Mach-O.
+    ios/sim_x86_64 | tvos/sim_x86_64) cpu=(-DAOM_TARGET_CPU=generic) ;;
+    maccatalyst/x86_64)      cpu=(-DAOM_TARGET_CPU=x86_64) ;;
     ios/* | tvos/* | visionos/* | maccatalyst/*)    cpu=(-DAOM_TARGET_CPU=arm64) ;;
     # WebAssembly runs single-threaded (see scripts/platforms/wasm.sh).
     wasm/*)                  cpu=(-DAOM_TARGET_CPU=generic -DCONFIG_MULTITHREAD=0 -DCONFIG_RUNTIME_CPU_DETECT=0) ;;
