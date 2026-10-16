@@ -7,8 +7,9 @@ DEP_FEATURE=mp3lame
 dep_build() {
   fetch_source
   update_config_scripts
-  # lame_init_old is listed in the export file but not defined; it breaks some linkers.
-  sed -i.bak '/lame_init_old/d' include/libmp3lame.sym
+  # The export file lists lame_init_old, which is not defined, and the decoder functions,
+  # which --disable-decoder leaves out; shared libraries cannot export them.
+  sed -i.bak -e '/lame_init_old/d' -e '/^lame_decode/d' -e '/^hip_/d' include/libmp3lame.sym
   local asm=()
   [[ "$TARGET_ARCH" == x86* ]] && asm=(--enable-nasm)
   autotools_build --disable-frontend --disable-decoder --disable-gtktest ${asm[@]+"${asm[@]}"}

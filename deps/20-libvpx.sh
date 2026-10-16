@@ -44,6 +44,10 @@ dep_build() {
   esac
   local kind=(--enable-static --disable-shared)
   dep_shared && kind=(--disable-static --enable-shared)
+  # The shared library uses pthreads; glibc before 2.34 keeps them in libpthread.
+  if dep_shared && [[ "$TARGET_PLATFORM" == linux || "$TARGET_PLATFORM" == freebsd ]]; then
+    export LDFLAGS="$LDFLAGS -pthread"
+  fi
   ./configure --prefix="$DEPS_PREFIX" --target="$target" \
     "${kind[@]}" --enable-pic --enable-vp9-highbitdepth \
     --disable-examples --disable-tools --disable-docs --disable-unit-tests ${extra[@]+"${extra[@]}"}
