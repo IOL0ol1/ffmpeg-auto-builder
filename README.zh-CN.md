@@ -13,9 +13,9 @@
 - 只执行仓库所有者 / 协作者提交的编译 Issue，其他人提交的 Issue 不会消耗 Actions 额度。
 - 编译开始、完成、失败都会自动在 Issue 中评论，并附 Draft Release 与 Artifact 链接；GitHub 会按你的通知设置推送提醒。
 - 支持公有 FFmpeg 仓库；配置 `SOURCE_PAT` Secret 后支持私有 FFmpeg Fork。
-- 支持 Linux / macOS / Windows 的 x86_64、x86、arm64、armv7，macOS 可生成 x86_64 + arm64 通用（Universal）二进制。
+- 支持 Linux（x86_64、x86、arm64、armv7、armel、ppc64le、s390x、riscv64、mips64el、mipsel、loongarch64）、macOS、Windows、Android、iOS、tvOS、visionOS、Mac Catalyst、FreeBSD 和 WebAssembly；Apple 平台可生成通用（Universal）二进制。
 - 参照官方预编译版本的做法，**从源码编译常用第三方库并静态链接**（x264、x265、libvpx、dav1d、SVT-AV1、libaom、Opus、LAME、Vorbis、WebP、zimg、SoX 重采样、libass），每个库都可以在网页上开关。
-- Linux x86_64 / arm64 产物兼容 glibc 2.28+（RHEL 8、Debian 10、Ubuntu 20.04 及更新版本）；Windows x86_64 / x86 / arm64 用 llvm-mingw 交叉编译，生成不依赖额外 DLL 的可执行文件；macOS 支持 11.0+；Linux x86 / armv7 兼容 glibc 2.31+（Debian 11、Ubuntu 20.04 及更新版本）。
+- Linux x86_64 / arm64 产物兼容 glibc 2.28+（RHEL 8、Debian 10、Ubuntu 20.04 及更新版本），其余 Linux 指令集兼容 glibc 2.31+（loongarch64 为 2.36+）；Windows 用 llvm-mingw 交叉编译，生成不依赖额外 DLL 的可执行文件；macOS 支持 11.0+。详见“平台与指令集对照表”。
 - ccache 增量编译、冒烟测试、统一发布一个 Draft Release（附 `SHA256SUMS.txt`）。
 - 打包格式支持 `tar.gz`、`zip` 和可用于 C++ / C# 项目的 **NuGet 包**；一个 NuGet 包可以包含该平台任意勾选的多个指令集。
 - 产物可直接解压使用：共享库构建自动修正 rpath / install name，`.pc` 文件改为相对路径，Windows 可执行文件不依赖额外 DLL，包内附 `BUILDINFO.txt`。
@@ -116,6 +116,7 @@
 ```text
 bin/            ffmpeg、ffprobe（以及 Windows 下的 DLL）
 lib/            静态库 / 共享库、pkgconfig/*.pc
+                （静态库构建还包含第三方静态库 libx264.a 等）
                 （Windows 共享库构建：导入库 avcodec.lib 等及 .def 文件）
 include/        头文件
 share/          示例与 man 页（取决于 configure 参数）
@@ -134,21 +135,26 @@ BUILDINFO.txt   源码仓库、ref、commit、编译器、configure 参数
 
 ## 平台与指令集对照表
 
-| 平台    | 指令集    | Runner                       | 说明                                  |
-|---------|-----------|------------------------------|---------------------------------------|
-| linux   | x86_64    | ubuntu-latest，manylinux_2_28 容器 | 原生编译，glibc 2.28+，含第三方库 |
-| linux   | arm64     | ubuntu-24.04-arm，manylinux_2_28 容器 | 原生编译，glibc 2.28+，含第三方库 |
-| linux   | x86       | ubuntu-latest，Ubuntu 20.04 容器 | `i686-linux-gnu` 交叉编译（SSE2），glibc 2.31+，含第三方库 |
-| linux   | armv7     | ubuntu-latest，Ubuntu 20.04 容器 | `arm-linux-gnueabihf` 交叉编译（硬浮点），glibc 2.31+，含第三方库 |
-| macos   | x86_64    | macos-15-intel               | 原生编译（最低 macOS 11），含第三方库 |
-| macos   | arm64     | macos-15                     | 原生编译（最低 macOS 11），含第三方库 |
-| macos   | universal | macos-15-intel + macos-15    | 分别编译后 lipo 合并（含静态库）      |
-| windows | x86_64    | ubuntu-latest                | llvm-mingw 交叉编译，含第三方库       |
-| windows | x86       | ubuntu-latest                | llvm-mingw 交叉编译（SSE2），含第三方库 |
-| windows | arm64     | ubuntu-latest                | llvm-mingw 交叉编译，含第三方库       |
+所有目标都定义在 `docs/targets.json` 中（runner、容器、NuGet RID 以及可编译的内容），网页、工作流和 NuGet 打包脚本都从这里读取。
 
-> - `universal`（macOS，`tar.gz` / `zip`）把 x86_64 和 arm64 合并为通用二进制。
-> - 打包格式为 NuGet 时，指令集变为多选：勾选的指令集并行编译，并打进同一个 NuGet 包（NuGet 下不提供 `universal`，请同时勾选 x86_64 和 arm64）。
+| 平台 | 指令集 | 编译环境 | 说明 |
+|---|---|---|---|
+| linux | x86_64、arm64 | ubuntu-latest / ubuntu-24.04-arm，manylinux_2_28 容器 | 原生编译，glibc 2.28+ |
+| linux | x86、armv7、armel、ppc64le、s390x、riscv64、mips64el、mipsel | ubuntu-latest，Ubuntu 20.04 容器 | 用发行版的 GCC 交叉编译，glibc 2.31+；通过 qemu-user 冒烟测试 |
+| linux | loongarch64 | ubuntu-latest，Ubuntu 24.04 容器 | 龙芯官方交叉工具链（GCC 14），glibc 2.36+（新世界 ABI） |
+| macos | x86_64、arm64、universal | macos-15-intel / macos-15 | 原生编译，macOS 11+；universal 为两者 lipo 合并 |
+| windows | x86_64、x86、arm64 | ubuntu-latest | llvm-mingw 交叉编译，Windows 10+ |
+| android | arm64（arm64-v8a）、armv7（armeabi-v7a）、x86_64、x86 | ubuntu-latest | Android NDK r27d，API 21+，静态 libc++ |
+| ios | arm64（真机）、sim_arm64、sim_x86_64、sim_universal | macos-15 | Xcode，iOS 13+；只支持静态库，不编译 ffmpeg / ffprobe 程序 |
+| tvos | arm64（真机）、sim_arm64、sim_x86_64、sim_universal | macos-15 | Xcode，tvOS 13+；只支持静态库，不编译程序 |
+| visionos | arm64（真机）、sim_arm64 | macos-15 | Xcode，visionOS 1+；只支持静态库，不编译程序 |
+| maccatalyst | arm64、x86_64、universal | macos-15 | Xcode，Mac Catalyst 14+（在 macOS 上运行的 iOS 应用） |
+| freebsd | x86_64、arm64 | ubuntu-latest | clang + lld 针对 FreeBSD 14.4 基本系统交叉编译；可在 14.4+ 与 15.x 上运行 |
+| wasm | wasm32 | ubuntu-latest | Emscripten 6.0.10；供 Emscripten 项目使用的单线程静态库 |
+
+> - `universal` / `sim_universal`（`tar.gz` / `zip`）用 lipo 把两个指令集合并为通用二进制。
+> - 打包格式为 NuGet 时，指令集变为多选：勾选的指令集并行编译，并打进同一个 NuGet 包（NuGet 下不提供合并指令集，请分别勾选）。只支持静态库的平台（iOS、tvOS、visionOS、WebAssembly）不能打包为 NuGet。
+> - 冒烟测试（`ffmpeg -version`）在 Linux（原生或通过 qemu-user）和 macOS 上运行，其余目标无法在编译机上运行。
 > - 部分指令集失败时，成功的产物仍会发布到 Draft Release。
 
 ## NuGet 包
@@ -233,8 +239,8 @@ static extern IntPtr av_version_info();
   - **依赖自动联动**：关闭 libavfilter 会同时关闭 ffmpeg（ffmpeg 依赖它），勾选 ffmpeg 会自动开启 libavfilter，页面会提示并高亮被联动的选项。
   - **许可证**：仅限 GPL 的组件（如 `hqdn3d`、`delogo`、`eq`、`cropdetect`、`mpdecimate` 滤镜）带 **GPL** 标记，选择 LGPL 时变灰不可选。
   - **库依赖**：关闭 libswscale / libswresample 后，精简模式中的 `scale` / `aresample` 滤镜变灰不可选。
-  - **目标平台**：目标平台为 Linux 时 `https` 协议不可选（Linux 编译环境没有 TLS 库）。
-  - **第三方库**：x264 / x265（GPL）在 LGPL 下不可选；SVT-AV1 仅支持 64 位，在 Linux / Windows x86、Linux armv7 下不可选（NuGet 勾选的指令集中包含它们时同样不可选）。
+  - **目标平台**：`https` 协议只在系统提供 TLS 的平台可选（macOS、Windows、iOS、tvOS、visionOS、Mac Catalyst）。iOS / tvOS / visionOS / WebAssembly 只能静态链接、不编译 ffmpeg / ffprobe 程序，也不能选择 NuGet。
+  - **第三方库**：x264 / x265（GPL）在 LGPL 下不可选；SVT-AV1 只在 64 位 x86 / Arm 目标上可选；WebAssembly（单线程）不提供 x265、SVT-AV1、dav1d 和 libass；NuGet 勾选多个指令集时，库必须在所有勾选的指令集上都可用。
   - **精简模式**：`file` 协议固定保留，保证能读写本地文件。
   - 灰色选项悬停可查看原因；限制解除后（如切回 GPL），之前的勾选会自动恢复。
 - **为什么没有 GPL v3**：FFmpeg 自带组件中没有任何一个要求 version3，它只影响 opencore-amr、mbedtls 等第三方库。编译环境没有这些库，因此只提供 LGPL / GPL；需要时可在自定义参数中写 `--enable-version3`。
@@ -251,10 +257,10 @@ static extern IntPtr av_version_info();
    - 校验失败时在 Issue 中回复错误原因并关闭；成功时打上 `build` 标签并回复“已开始编译”。
 3. **build**（矩阵并行）：
    - `actions/checkout` 拉取源码（私有仓库使用 `SOURCE_PAT` Secret，`persist-credentials: false`）；
-   - 安装编译工具（Linux x86_64 / arm64 在 manylinux_2_28 容器中编译，Linux x86 / armv7 在 Ubuntu 20.04 容器中交叉编译；Windows 在 Ubuntu 上用 llvm-mingw）；
+   - 安装该目标的编译工具（`scripts/platforms/<工具链>.sh`；runner 和容器来自 `docs/targets.json`）；
    - 从 Actions 缓存恢复第三方库，缺少的由 `scripts/build-deps.sh` 补齐；
    - 恢复 ccache 缓存；
-   - `scripts/build-ffmpeg.sh`：configure → make → make install → 修正 rpath / install name / `.pc` 路径 → 打包 Windows 运行时 DLL → `ffmpeg -version` 冒烟测试（armv7 通过 qemu-user 运行；Windows 跳过）→ 写入 `BUILDINFO.txt` → 打包；
+   - `scripts/build-ffmpeg.sh`：configure → make → make install → 修正 rpath / install name / `.pc` 路径 → 打包 Windows 运行时 DLL → `ffmpeg -version` 冒烟测试（其余 Linux 指令集通过 qemu-user 运行；编译机无法运行的目标跳过）→ 写入 `BUILDINFO.txt` → 打包；
    - 上传 Artifact。
 4. **lipo**（仅 macOS universal）：合并两个架构的可执行文件、动态库与静态库。
 5. **release**：汇总所有成功的产物（NuGet 格式时先由 `scripts/pack-nuget.py` 把各平台压缩包合并为一个 `.nupkg`），生成 `SHA256SUMS.txt`，一次性创建 Draft Release，然后在 Issue 中回复结果，成功则关闭 Issue。
@@ -269,10 +275,11 @@ static extern IntPtr av_version_info();
 
 ## 已知限制
 
-- **Linux x86 / armv7** 需要 glibc 2.31+（高于 64 位产物的 2.28）。armv7 以 armhf 基线（VFPv3-D16）为目标，不假定 NEON，因此 libaom 和 zimg 在该平台不使用 SIMD；FFmpeg 自身的 NEON 代码仍会在运行时按 CPU 选择。
-- **Windows** 为交叉编译，不运行冒烟测试。
+- **Linux 交叉编译的指令集**需要 glibc 2.31+（高于 x86_64 / arm64 的 2.28；loongarch64 为 2.36+），并以发行版基线为目标：armv7 为 armhf（VFPv3-D16，不假定 NEON），armel 为 ARMv5TE 软浮点，MIPS 为 MIPS32r2 / MIPS64r2（不使用 DSP / MSA / 龙芯扩展）。部分库在这些平台使用纯 C 实现（libaom、libvpx、zimg；x264 在 armel / s390x / riscv64 / MIPS 上），编码速度低于 x86_64 / arm64。
+- **冒烟测试**：Windows、Android、Apple 移动平台、FreeBSD 和 WebAssembly 为交叉编译，编译机无法运行产物，因此不运行 `ffmpeg -version`。
+- **Apple 移动平台 / WebAssembly** 的产物只有静态库（FFmpeg 的库以及 `lib/` 中的第三方库），需要链接进你的应用；暂不提供 `.xcframework` 打包。
 - **x265** 目前只编译 8-bit（暂不支持 10/12-bit 多位深）。
-- **TLS**：Linux 构建没有 TLS 库，因此不支持 `https`；Windows 使用 Schannel，macOS 使用系统 TLS。
+- **TLS**：Linux、Android、FreeBSD 和 WebAssembly 构建没有 TLS 库，因此不支持 `https`；Windows 使用 Schannel，Apple 平台使用系统 TLS。
 - **Linux 上的 libass** 未编译 fontconfig：字幕字体来自字幕文件内嵌的字体或滤镜的 `fontsdir` 参数。
 - 每个目标平台第一次编译第三方库约需 20–40 分钟，缓存后不再重复。
 - **macOS Intel**：GitHub 预计在 2027 年秋随 macOS 15 镜像退役而停止提供 Intel runner，届时 macOS x86_64 / universal 需改为在 arm64 上交叉编译。

@@ -13,9 +13,9 @@ A template repository for building FFmpeg online with **GitHub Pages + GitHub Is
 - Only build issues opened by the repository owner or collaborators are run, so other people's issues cannot spend your Actions minutes.
 - The workflow comments on the issue when the build starts, fails or finishes, with links to the draft release and artifacts; GitHub notifies you according to your notification settings.
 - Builds public FFmpeg repositories, and private FFmpeg forks once a `SOURCE_PAT` secret is configured.
-- Linux / macOS / Windows with x86_64, x86, arm64 and armv7; macOS can produce an x86_64 + arm64 universal binary.
+- Linux (x86_64, x86, arm64, armv7, armel, ppc64le, s390x, riscv64, mips64el, mipsel, loongarch64), macOS, Windows, Android, iOS, tvOS, visionOS, Mac Catalyst, FreeBSD and WebAssembly; Apple targets can produce universal (fat) binaries.
 - Like the official prebuilt FFmpeg binaries, common **third-party libraries are built from source and linked statically** (x264, x265, libvpx, dav1d, SVT-AV1, libaom, Opus, LAME, Vorbis, WebP, zimg, SoX resampler, libass); each one can be toggled on the page.
-- Linux x86_64 / arm64 builds run on glibc 2.28+ (RHEL 8, Debian 10, Ubuntu 20.04 and newer); Windows x86_64 / x86 / arm64 is cross-compiled with llvm-mingw into self-contained executables; macOS supports 11.0+; Linux x86 / armv7 run on glibc 2.31+ (Debian 11, Ubuntu 20.04 and newer).
+- Linux x86_64 / arm64 builds run on glibc 2.28+ (RHEL 8, Debian 10, Ubuntu 20.04 and newer), the other Linux architectures on glibc 2.31+ (loongarch64: 2.36+); Windows is cross-compiled with llvm-mingw into self-contained executables; macOS supports 11.0+. See "Platforms and architectures".
 - ccache for incremental builds, a smoke test, and a single draft release per build (with `SHA256SUMS.txt`).
 - Packages as `tar.gz`, `zip` or a **NuGet package** for C++ and C# projects; one NuGet package can contain any selection of the platform's architectures.
 - Packages work right after extraction: shared builds get fixed rpaths / install names, `.pc` files use relative paths, Windows executables need no extra DLLs, and every package contains `BUILDINFO.txt`.
@@ -116,6 +116,7 @@ Archives are named `ffmpeg-<platform>-<arch>-<license>-<build id>.zip` (or `.tar
 ```text
 bin/            ffmpeg, ffprobe (and DLLs on Windows)
 lib/            static / shared libraries, pkgconfig/*.pc
+                (static builds also contain the third-party static libraries, libx264.a, ...)
                 (Windows shared builds: import libraries avcodec.lib, ... plus .def files)
 include/        headers
 share/          examples and man pages (depending on configure options)
@@ -134,21 +135,26 @@ Open **Actions → build-ffmpeg → Run workflow** and fill in the same paramete
 
 ## Platforms and architectures
 
-| Platform | Architecture | Runner                       | Notes                                        |
-|----------|--------------|------------------------------|----------------------------------------------|
-| linux    | x86_64       | ubuntu-latest, manylinux_2_28 container | Native build, glibc 2.28+, third-party libraries |
-| linux    | arm64        | ubuntu-24.04-arm, manylinux_2_28 container | Native build, glibc 2.28+, third-party libraries |
-| linux    | x86          | ubuntu-latest, Ubuntu 20.04 container | `i686-linux-gnu` cross-compile (SSE2), glibc 2.31+, third-party libraries |
-| linux    | armv7        | ubuntu-latest, Ubuntu 20.04 container | `arm-linux-gnueabihf` cross-compile (hard float), glibc 2.31+, third-party libraries |
-| macos    | x86_64       | macos-15-intel               | Native build (minimum macOS 11), third-party libraries |
-| macos    | arm64        | macos-15                     | Native build (minimum macOS 11), third-party libraries |
-| macos    | universal    | macos-15-intel + macos-15    | Built separately, merged with lipo (including static libraries) |
-| windows  | x86_64       | ubuntu-latest                | llvm-mingw cross-compile, third-party libraries |
-| windows  | x86          | ubuntu-latest                | llvm-mingw cross-compile (SSE2), third-party libraries |
-| windows  | arm64        | ubuntu-latest                | llvm-mingw cross-compile, third-party libraries |
+Every target is defined in `docs/targets.json` (runner, container, NuGet RID and what it can build); the page, the workflow and the NuGet packer read it from there.
 
-> - `universal` (macOS, `tar.gz` / `zip`) merges x86_64 and arm64 into fat binaries.
-> - With NuGet, the architecture becomes a multi-select: every checked architecture is built in parallel and packed into one NuGet package (`universal` is not offered there; check x86_64 and arm64 instead).
+| Platform | Architectures | Built on | Notes |
+|---|---|---|---|
+| linux | x86_64, arm64 | ubuntu-latest / ubuntu-24.04-arm, manylinux_2_28 container | Native, glibc 2.28+ |
+| linux | x86, armv7, armel, ppc64le, s390x, riscv64, mips64el, mipsel | ubuntu-latest, Ubuntu 20.04 container | Cross-compiled with the distribution's GCC, glibc 2.31+; smoke test through qemu-user |
+| linux | loongarch64 | ubuntu-latest, Ubuntu 24.04 container | Loongson's cross toolchain (GCC 14), glibc 2.36+ (new-world ABI) |
+| macos | x86_64, arm64, universal | macos-15-intel / macos-15 | Native, macOS 11+; universal = lipo of both |
+| windows | x86_64, x86, arm64 | ubuntu-latest | llvm-mingw cross-compile, Windows 10+ |
+| android | arm64 (arm64-v8a), armv7 (armeabi-v7a), x86_64, x86 | ubuntu-latest | Android NDK r27d, API 21+, static libc++ |
+| ios | arm64 (device), sim_arm64, sim_x86_64, sim_universal | macos-15 | Xcode, iOS 13+; static libraries only, no ffmpeg / ffprobe programs |
+| tvos | arm64 (device), sim_arm64, sim_x86_64, sim_universal | macos-15 | Xcode, tvOS 13+; static libraries only, no programs |
+| visionos | arm64 (device), sim_arm64 | macos-15 | Xcode, visionOS 1+; static libraries only, no programs |
+| maccatalyst | arm64, x86_64, universal | macos-15 | Xcode, Mac Catalyst 14+ (iOS apps on macOS) |
+| freebsd | x86_64, arm64 | ubuntu-latest | clang + lld against the FreeBSD 14.4 base system; runs on 14.4+ and 15.x |
+| wasm | wasm32 | ubuntu-latest | Emscripten 6.0.10; static, single-threaded libraries for Emscripten projects |
+
+> - `universal` / `sim_universal` (`tar.gz` / `zip`) merge the two architectures into fat binaries with lipo.
+> - With NuGet, the architecture becomes a multi-select: every checked architecture is built in parallel and packed into one NuGet package (merged architectures are not offered there; check the single ones instead). Platforms that only build static libraries (iOS, tvOS, visionOS, WebAssembly) cannot be packaged as NuGet.
+> - The smoke test (`ffmpeg -version`) runs on Linux (natively or through qemu-user) and macOS; the other targets cannot run on the build host.
 > - If some architectures fail, the successful packages are still published to the draft release.
 
 ## NuGet package
@@ -233,8 +239,8 @@ The page turns common configure switches into visual controls and builds the fla
   - **Linked dependencies**: disabling libavfilter also disables ffmpeg (which depends on it), and enabling ffmpeg enables libavfilter; the page shows a notice and highlights the linked option.
   - **License**: GPL-only components (such as the `hqdn3d`, `delogo`, `eq`, `cropdetect` and `mpdecimate` filters) carry a **GPL** badge and are greyed out under LGPL.
   - **Library dependencies**: with libswscale / libswresample disabled, the `scale` / `aresample` filters are greyed out in slim mode.
-  - **Target platform**: the `https` protocol is unavailable for Linux targets (the Linux build environment has no TLS library).
-  - **Third-party libraries**: x264 / x265 (GPL) are unavailable under LGPL, SVT-AV1 is 64-bit only, so it is unavailable for Linux / Windows x86 and Linux armv7 (also when a NuGet selection includes one of them).
+  - **Target platform**: the `https` protocol is only available where the system provides TLS (macOS, Windows, iOS, tvOS, visionOS, Mac Catalyst). iOS / tvOS / visionOS / WebAssembly only offer static linking and no ffmpeg / ffprobe programs, and cannot be selected for NuGet.
+  - **Third-party libraries**: x264 / x265 (GPL) are unavailable under LGPL, SVT-AV1 is only available on 64-bit x86 / Arm targets, and WebAssembly (single-threaded) has no x265, SVT-AV1, dav1d or libass; with several NuGet architectures a library must be available on all of them.
   - **Slim mode**: the `file` protocol is always kept so local files can be read and written.
   - Hover over a greyed-out option to see why; when the restriction is lifted (e.g. switching back to GPL), the earlier selection comes back.
 - **Why there is no GPL v3**: no built-in FFmpeg component requires version3; it only affects third-party libraries such as opencore-amr and mbedtls. The build environment has none of them, so only LGPL / GPL are offered; add `--enable-version3` as a custom flag if needed.
@@ -251,10 +257,10 @@ The page turns common configure switches into visual controls and builds the fla
    - on invalid parameters, replies with the reason and closes the issue; otherwise adds the `build` label and replies "Build started".
 3. **build** (parallel matrix):
    - checks out the source with `actions/checkout` (private repositories use the `SOURCE_PAT` secret, with `persist-credentials: false`);
-   - installs the build tools (Linux x86_64 / arm64 run in a manylinux_2_28 container, Linux x86 / armv7 in an Ubuntu 20.04 container; Windows uses llvm-mingw on Ubuntu);
+   - installs the build tools of the target (`scripts/platforms/<toolchain>.sh`; runner and container come from `docs/targets.json`);
    - restores the third-party library prefix from the Actions cache and builds whatever is missing with `scripts/build-deps.sh`;
    - restores the ccache cache;
-   - `scripts/build-ffmpeg.sh`: configure → make → make install → fix rpath / install names / `.pc` paths → bundle Windows runtime DLLs → `ffmpeg -version` smoke test (armv7 through qemu-user; skipped for Windows) → write `BUILDINFO.txt` → package;
+   - `scripts/build-ffmpeg.sh`: configure → make → make install → fix rpath / install names / `.pc` paths → bundle Windows runtime DLLs → `ffmpeg -version` smoke test (other Linux architectures through qemu-user; skipped where the build host cannot run the result) → write `BUILDINFO.txt` → package;
    - uploads the artifact.
 4. **lipo** (macOS universal only): merges executables, shared libraries and static libraries of both architectures.
 5. **release**: collects every successful package (for NuGet, `scripts/pack-nuget.py` first combines the platform archives into one `.nupkg`), generates `SHA256SUMS.txt`, creates one draft release, then replies on the issue and closes it on success.
@@ -269,10 +275,11 @@ The page turns common configure switches into visual controls and builds the fla
 
 ## Known limitations
 
-- **Linux x86 / armv7** need glibc 2.31+ (newer than the 2.28 of the 64-bit builds). armv7 targets the armhf baseline (VFPv3-D16) and does not assume NEON, so libaom and zimg are built without SIMD there; FFmpeg's own NEON code is still selected at run time.
-- **Windows** builds are cross-compiled, so the smoke test does not run for them.
+- **Linux cross-compiled architectures** need glibc 2.31+ (newer than the 2.28 of x86_64 / arm64; loongarch64 2.36+). They target the distribution baselines: armv7 is armhf (VFPv3-D16, NEON not assumed), armel is ARMv5TE soft-float, MIPS is MIPS32r2 / MIPS64r2 without DSP / MSA / Loongson extensions. Several libraries use portable C there (libaom, libvpx, zimg; x264 on armel / s390x / riscv64 / MIPS), so encoding is slower than on x86_64 / arm64.
+- **Smoke test**: Windows, Android, the Apple mobile targets, FreeBSD and WebAssembly are cross-compiled and cannot run on the build host, so `ffmpeg -version` is not run for them.
+- **Apple mobile / WebAssembly** packages contain static libraries only (FFmpeg's plus the third-party ones in `lib/`); link them into your app. There is no `.xcframework` packaging yet.
 - **x265** is built 8-bit only (no 10/12-bit multilib yet).
-- **TLS**: Linux builds have no TLS library, so `https` is not available there; Windows uses Schannel and macOS uses the system TLS.
+- **TLS**: Linux, Android, FreeBSD and WebAssembly builds have no TLS library, so `https` is not available there; Windows uses Schannel and the Apple platforms the system TLS.
 - **libass on Linux** is built without fontconfig: subtitle fonts come from the subtitle file's attachments or the filter's `fontsdir`.
 - The first build of the third-party libraries for a target takes 20–40 minutes until it is cached.
 - **macOS Intel**: GitHub plans to stop providing Intel runners when the macOS 15 image is retired in fall 2027; macOS x86_64 / universal will then need cross-compiling on arm64.

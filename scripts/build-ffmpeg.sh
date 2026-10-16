@@ -86,13 +86,26 @@ fi
 
 shopt -s nullglob
 
-# Rewrite absolute install paths in pkg-config files to be relative to the .pc file.
+# Static FFmpeg libraries still need the third-party ones they were built against; ship
+# them next to libavcodec.a etc. so that linking with the package works on its own.
+bundle_static_deps() {
+  local libs=("$install_root"/lib/libavutil.a)
+  [[ "${#libs[@]}" -gt 0 && -n "${DEPS_PREFIX:-}" ]] || return 0
+  local lib
+  for lib in "$DEPS_PREFIX"/lib/*.a; do
+    [[ -e "$install_root/lib/$(basename "$lib")" ]] || cp "$lib" "$install_root/lib/"
+  done
+}
+
+# Rewrite absolute install paths in pkg-config files to be relative to the .pc file; the
+# third-party libraries are in the same lib/ (bundle_static_deps) or linked in already.
 fix_pkgconfig() {
   local pc
   for pc in "$install_root"/lib/pkgconfig/*.pc; do
     sed -i.bak \
       -e "s|^prefix=${install_root}\$|prefix=\${pcfiledir}/../..|" \
       -e "s|${install_root}|\${prefix}|g" \
+      -e "s| -L${DEPS_PREFIX:-/nonexistent}/lib||g" \
       "$pc"
     rm -f "$pc.bak"
   done
@@ -173,6 +186,7 @@ fix_windows_import_libs() {
   rm -f "$install_root"/lib/lib*.dll.a
 }
 
+bundle_static_deps
 fix_pkgconfig
 case "$TARGET_PLATFORM" in
   linux | freebsd)     fix_linux_rpath ;;
