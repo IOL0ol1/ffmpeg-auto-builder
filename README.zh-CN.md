@@ -126,6 +126,7 @@ BUILDINFO.txt   源码仓库、ref、commit、编译器、configure 参数
 - **直接运行**：`./bin/ffmpeg -version`。共享库构建已设置 rpath（Linux 为 `$ORIGIN/../lib`，macOS 为 `@loader_path/../lib`），不需要设置 `LD_LIBRARY_PATH` / `DYLD_LIBRARY_PATH`。
 - **macOS 首次运行**提示“无法验证开发者”时，执行 `xattr -dr com.apple.quarantine <解压目录>`。
 - **作为开发库使用**：`export PKG_CONFIG_PATH=<解压目录>/lib/pkgconfig`，`.pc` 文件中的路径已改为相对位置，放在任意目录都能正确解析。
+- **CMake**：每个产物都包含 `lib/cmake/FFmpeg`。指定 `-DCMAKE_PREFIX_PATH=<解压目录>` 后，`find_package(FFmpeg REQUIRED COMPONENTS avformat)` 会定义 `FFmpeg::avcodec`、`FFmpeg::avformat` 等目标（`FFmpeg::FFmpeg` 包含全部），自带头文件目录、库之间的依赖，以及静态库所需的第三方库；同时含静态库和共享库时，设置 `FFmpeg_USE_STATIC_LIBS=ON` 优先使用静态库。
 - **Windows**：静态构建只有 `ffmpeg.exe` / `ffprobe.exe` 两个文件，只依赖 Windows 系统 DLL（Windows 10+）。共享库构建的 `avcodec-63.dll` 等在 `bin/`，导入库 `avcodec.lib` 等在 `lib/`，MSVC、clang-cl 和 MinGW 都能直接链接。静态构建的静态库（`libavcodec.a` 等）由 MinGW 工具链生成，需要用 MinGW 或 clang 链接；MSVC 项目请使用共享库构建。
 - **库文件命名**：Linux 为 `libavcodec.so` → `libavcodec.so.63` → `libavcodec.so.63.x.y`（符号链接，SONAME 为 `libavcodec.so.63`）；macOS 为 `libavcodec.dylib` → `libavcodec.63.dylib` → `libavcodec.63.x.y.dylib`（install name 为 `@rpath/libavcodec.63.dylib`）。
 

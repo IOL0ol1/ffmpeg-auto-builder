@@ -197,8 +197,18 @@ fix_windows_import_libs() {
   rm -f "$install_root"/lib/lib*.dll.a
 }
 
+# find_package(FFmpeg) support; the version is the numeric part of the source's RELEASE.
+install_cmake_config() {
+  local dir="$install_root/lib/cmake/FFmpeg" version
+  version="$(head -n 1 "$source_dir/RELEASE" 2>/dev/null | grep -oE '^[0-9]+(\.[0-9]+)*' || true)"
+  mkdir -p "$dir"
+  cp "$script_dir/cmake/FFmpegConfig.cmake" "$dir/"
+  sed "s/@FFMPEG_VERSION@/${version:-0}/" "$script_dir/cmake/FFmpegConfigVersion.cmake.in" >"$dir/FFmpegConfigVersion.cmake"
+}
+
 bundle_static_deps
 fix_pkgconfig
+install_cmake_config
 case "$TARGET_PLATFORM" in
   linux | freebsd)     fix_linux_rpath ;;
   macos | maccatalyst) fix_macos_install_names ;;
