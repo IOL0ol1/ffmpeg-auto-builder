@@ -241,7 +241,7 @@ AndroidManifest.xml、classes.jar     包名 io.github.<所有者>.ffmpeg，minS
 | zlib | 1.3.2 | zlib | （自动检测） | |
 
 - **许可证**：x264 和 x265 是 GPL，只有选择 GPL 许可证时才可用，此时产物也是 GPL；其余库可用于 LGPL 构建。
-- **静态或共享**：**第三方库链接**选项（默认静态）可以把第三方库编译为静态库链接进 FFmpeg，或编译为共享库随包提供（`.so` / `.dylib` / `.dll`，XCFramework 中为 framework）。共享库可以单独替换，适用于 LGPL 合规（LAME、FriBidi、SoX）、安全更新（如 libwebp）或与应用其他部分共用同一份库。共享需要目标能加载共享库（WebAssembly 不行；iOS / tvOS / visionOS 只能用于 XCFramework）。Windows 上的 zlib、zimg，以及 Linux / FreeBSD / macOS 以外的 libvpx 仍为静态。
+- **静态或共享**：**第三方库链接**选项（默认静态）可以把第三方库编译为静态库链接进 FFmpeg，或编译为共享库随包提供（`.so` / `.dylib` / `.dll`，XCFramework 中为 framework）。共享库可以单独替换，适用于 LGPL 合规（LAME、FriBidi、SoX）、安全更新（如 libwebp）或与应用其他部分共用同一份库。共享需要目标能加载共享库（WebAssembly 不行；iOS / tvOS / visionOS 只能用于 XCFramework）。Windows 上的 zlib、Windows / Android 上的 zimg，以及 Linux / FreeBSD / macOS 以外的 libvpx 仍为静态。
 - **缓存**：每个目标平台第一次编译第三方库约需 20–40 分钟，结果保存在 Actions 缓存中，之后的编译直接复用。也可以先运行一次 **Actions → build-deps → Run workflow**，为所有平台预热缓存。修改某个库的脚本只会重新编译这个库。
 - **添加新库**：新增 `deps/NN-name.sh`，写明 `DEP_VERSION`、`DEP_URL`、`DEP_SHA256`，并用 `scripts/build-deps.sh` 提供的 `autotools_build`、`cmake_build` 或 `meson_build` 实现 `dep_build`；再在 `docs/configure.js` 和 `docs/i18n.js` 中为它的 `--enable-lib...` 参数加一个开关。
 
