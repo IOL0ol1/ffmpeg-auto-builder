@@ -59,6 +59,18 @@ def is_runtime_file(path):
     return bool(re.fullmatch(r"lib[^.]+\.so\.\d+", name) or re.fullmatch(r"lib[^.]+\.\d+\.dylib", name))
 
 
+def drop_full_version_libraries(lib_dir):
+    """NuGet packages cannot hold symlinks, so each one becomes a full copy. Keep the
+    development name (libavcodec.so / .dylib) and the runtime name the binaries load
+    (libavcodec.so.63 / libavcodec.63.dylib); nothing refers to the full version."""
+    for path in sorted(lib_dir.glob("lib*")) if lib_dir.is_dir() else []:
+        linux = re.fullmatch(r"(lib[^.]+\.so\.\d+)(\.\d+)+", path.name)
+        macos = re.fullmatch(r"(lib[^.]+\.\d+)(\.\d+)+(\.dylib)", path.name)
+        runtime_name = linux.group(1) if linux else (macos.group(1) + macos.group(3) if macos else None)
+        if runtime_name and (lib_dir / runtime_name).is_file():
+            path.unlink()
+
+
 def read_buildinfo(root):
     info = {}
     path = root / "BUILDINFO.txt"
@@ -143,7 +155,7 @@ def write_targets(path, package_id, windows_import_libs):
       <PreprocessorDefinitions>__STDC_CONSTANT_MACROS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
-      <AdditionalLibraryDirectories>$(FFmpegRoot)bin;$(FFmpegRoot)lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(FFmpegRoot)lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
 {chr(10).join(lib_groups)}
@@ -252,6 +264,7 @@ def main():
             # copytree follows symlinks by default, so library symlinks become real files.
             tree = stage / "build" / "native" / rid
             shutil.copytree(unpacked, tree)
+            drop_full_version_libraries(tree / "lib")
             buildinfo = buildinfo or read_buildinfo(tree)
 
             runtime = stage / "runtimes" / rid / "native"
@@ -262,7 +275,7 @@ def main():
                         shutil.copy2(file, runtime / file.name)
 
             if rid in MSBUILD_PLATFORMS:
-                windows_import_libs[rid] = sorted(p.name for p in (tree / "bin").glob("*.lib")) if (tree / "bin").is_dir() else []
+                windows_import_libs[rid] = sorted(p.name for p in (tree / "lib").glob("*.lib")) if (tree / "lib").is_dir() else []
 
         rids = sorted(archives)
         # <owner>.FFmpeg.<License>[.<platform>], e.g. Owner.FFmpeg.LGPL.win-x64 or Owner.FFmpeg.GPL.linux.

@@ -113,6 +113,7 @@
 ```text
 bin/            ffmpeg、ffprobe（以及 Windows 下的 DLL）
 lib/            静态库 / 共享库、pkgconfig/*.pc
+                （Windows 共享库构建：导入库 avcodec.lib 等及 .def 文件）
 include/        头文件
 share/          示例与 man 页（取决于 configure 参数）
 BUILDINFO.txt   源码仓库、ref、commit、编译器、configure 参数
@@ -121,7 +122,8 @@ BUILDINFO.txt   源码仓库、ref、commit、编译器、configure 参数
 - **直接运行**：`./bin/ffmpeg -version`。共享库构建已设置 rpath（Linux 为 `$ORIGIN/../lib`，macOS 为 `@loader_path/../lib`），不需要设置 `LD_LIBRARY_PATH` / `DYLD_LIBRARY_PATH`。
 - **macOS 首次运行**提示“无法验证开发者”时，执行 `xattr -dr com.apple.quarantine <解压目录>`。
 - **作为开发库使用**：`export PKG_CONFIG_PATH=<解压目录>/lib/pkgconfig`，`.pc` 文件中的路径已改为相对位置，放在任意目录都能正确解析。
-- **Windows**：静态构建只有 `ffmpeg.exe` / `ffprobe.exe` 两个文件，只依赖 Windows 系统 DLL（Windows 10+）。
+- **Windows**：静态构建只有 `ffmpeg.exe` / `ffprobe.exe` 两个文件，只依赖 Windows 系统 DLL（Windows 10+）。共享库构建的 `avcodec-63.dll` 等在 `bin/`，导入库 `avcodec.lib` 等在 `lib/`，MSVC、clang-cl 和 MinGW 都能直接链接。静态构建的静态库（`libavcodec.a` 等）由 MinGW 工具链生成，需要用 MinGW 或 clang 链接；MSVC 项目请使用共享库构建。
+- **库文件命名**：Linux 为 `libavcodec.so` → `libavcodec.so.63` → `libavcodec.so.63.x.y`（符号链接，SONAME 为 `libavcodec.so.63`）；macOS 为 `libavcodec.dylib` → `libavcodec.63.dylib` → `libavcodec.63.x.y.dylib`（install name 为 `@rpath/libavcodec.63.dylib`）。
 
 ### 备用方式：手动运行工作流
 
@@ -163,6 +165,8 @@ README.md                      包说明
 ```
 
 RID：`linux-x64`、`linux-x86`、`linux-arm64`、`linux-arm`、`osx-x64`、`osx-arm64`、`win-x64`、`win-x86`、`win-arm64`（macOS `all` 会分别放入 `osx-x64` 和 `osx-arm64`）。
+
+NuGet 包不能包含符号链接，因此 Linux / macOS 的 `build/native/<rid>/lib/` 中以普通文件保存 `libavcodec.so` + `libavcodec.so.63`（`libavcodec.dylib` + `libavcodec.63.dylib`），省略没有被引用的完整版本号文件。
 
 **C# / .NET**：在 SDK 风格项目中添加此包，`runtimes/<rid>/native/` 会自动复制到输出目录。通过 P/Invoke（或 FFmpeg.AutoGen）按带版本号的库名调用——Windows 为 `avutil-61.dll`，Linux 为 `libavutil.so.61`，macOS 为 `libavutil.61.dylib`：
 

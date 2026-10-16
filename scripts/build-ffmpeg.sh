@@ -124,7 +124,8 @@ fix_macos_install_names() {
     lipo -info "$f" >/dev/null 2>&1 || continue
 
     if [[ "$f" == *.dylib ]]; then
-      install_name_tool -id "@rpath/$(basename "$f")" "$f"
+      # Keep FFmpeg's major-version name (libavcodec.63.dylib), not the file's full version.
+      install_name_tool -id "@rpath/$(basename "$(otool -D "$f" | tail -n 1)")" "$f"
       rpaths=('@loader_path')
     else
       # ../lib for the install tree, the own directory for the NuGet runtimes layout.
@@ -157,11 +158,21 @@ bundle_windows_runtime() {
   done
 }
 
+# Shared Windows builds link through the import libraries avcodec.lib etc., which FFmpeg
+# installs next to the DLLs; move them to lib/ and drop the MinGW-only libavcodec.dll.a.
+fix_windows_import_libs() {
+  local implib
+  for implib in "$install_root"/bin/*.lib; do
+    mv "$implib" "$install_root/lib/"
+  done
+  rm -f "$install_root"/lib/lib*.dll.a
+}
+
 fix_pkgconfig
 case "$TARGET_PLATFORM" in
   linux)   fix_linux_rpath ;;
   macos)   fix_macos_install_names ;;
-  windows) bundle_windows_runtime ;;
+  windows) bundle_windows_runtime; fix_windows_import_libs ;;
 esac
 
 # ── Smoke test (wherever the build host can run the result) ─────────────────

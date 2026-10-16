@@ -113,6 +113,7 @@ Archives are named `ffmpeg-<platform>-<arch>-<license>-<build id>.zip` (or `.tar
 ```text
 bin/            ffmpeg, ffprobe (and DLLs on Windows)
 lib/            static / shared libraries, pkgconfig/*.pc
+                (Windows shared builds: import libraries avcodec.lib, ... plus .def files)
 include/        headers
 share/          examples and man pages (depending on configure options)
 BUILDINFO.txt   source repository, ref, commit, compiler, configure flags
@@ -121,7 +122,8 @@ BUILDINFO.txt   source repository, ref, commit, compiler, configure flags
 - **Run directly**: `./bin/ffmpeg -version`. Shared builds have their rpath set (`$ORIGIN/../lib` on Linux, `@loader_path/../lib` on macOS), so no `LD_LIBRARY_PATH` / `DYLD_LIBRARY_PATH` is needed.
 - **macOS**: if the first run is blocked because the developer cannot be verified, run `xattr -dr com.apple.quarantine <extracted-dir>`.
 - **As a development library**: `export PKG_CONFIG_PATH=<extracted-dir>/lib/pkgconfig`; the `.pc` files use relative paths, so the directory can live anywhere.
-- **Windows**: static builds are single `ffmpeg.exe` / `ffprobe.exe` files that only depend on Windows system DLLs (Windows 10+).
+- **Windows**: static builds are single `ffmpeg.exe` / `ffprobe.exe` files that only depend on Windows system DLLs (Windows 10+). Shared builds put `avcodec-63.dll` and friends in `bin/` and the import libraries `avcodec.lib` etc. in `lib/`, which MSVC, clang-cl and MinGW can all link against. The static libraries of a static build (`libavcodec.a` etc.) come from the MinGW toolchain and need it (or clang) to link; use a shared build from MSVC.
+- **Library names**: Linux `libavcodec.so` → `libavcodec.so.63` → `libavcodec.so.63.x.y` (symlinks, SONAME `libavcodec.so.63`); macOS `libavcodec.dylib` → `libavcodec.63.dylib` → `libavcodec.63.x.y.dylib` (install name `@rpath/libavcodec.63.dylib`).
 
 ### Alternative: run the workflow manually
 
@@ -163,6 +165,8 @@ README.md                      package readme
 ```
 
 RIDs: `linux-x64`, `linux-x86`, `linux-arm64`, `linux-arm`, `osx-x64`, `osx-arm64`, `win-x64`, `win-x86`, `win-arm64` (macOS `all` contributes `osx-x64` and `osx-arm64`).
+
+NuGet packages cannot contain symlinks, so on Linux / macOS `build/native/<rid>/lib/` holds `libavcodec.so` + `libavcodec.so.63` (`libavcodec.dylib` + `libavcodec.63.dylib`) as regular files and leaves out the full-version name, which nothing refers to.
 
 **C# / .NET**: add the package to an SDK-style project; `runtimes/<rid>/native/` is copied to the output automatically. Call FFmpeg with P/Invoke (or FFmpeg.AutoGen) using the versioned library names — `avutil-61.dll` on Windows, `libavutil.so.61` on Linux, `libavutil.61.dylib` on macOS:
 
